@@ -1,0 +1,197 @@
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import { eq } from "drizzle-orm";
+import { getDb } from "@/lib/db";
+import { users } from "@/lib/db/schema";
+import {
+  authRateLimiter,
+  createSession,
+  getSessionCookieOptions,
+  logAuditEvent,
+  verifyPassword,
+} from "@/lib/auth";
+import { ApiResponse, SanitizedUser } from "@/types";
+
+const loginSchema = z.object({
+  email: z.string().email("Formato de correo inv?lido"),
+  password: z.string().min(1, "La contrase?a es requerida"),
+});
+
+export async function POST(request: NextRequest) {
+  const ipAddress = request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "unknown";
+  const userAgent = request.headers.get("user-agent") || "unknown";
+
+  // 1. Validar Rate Limit por IP
+  const rateCheck = authRateLimiter.isRateLimited(`ip:${ipAddress}`);
+  if (rateCheck.limited) {
+    const retrySeconds = Math.ceil(rateCheck.retryAfterMs / 1000);
+    return NextResponse.json<ApiResponse<null>>(
+      {
+        success: false,
+        error: {
+          code: "TOO_MANY_REQUESTS",
+          message: `Demasiados intentos de acceso fallidos. Por favor, reintenta en ${retrySeconds} segundos.`,
+        },
+      },
+      { status: 429 }
+    );
+  }
+
+  // 2. Parsear body
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json<ApiResponse<null>>(
+      {
+        success: false,
+        error: {
+          code: "INVALID_BODY",
+          message: "Formato de solicitud no v?lido.",
+        },
+      },
+      { status: 400 }
+    );
+  }
+
+  const parsed = loginSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json<ApiResponse<null>>(
+      {
+        success: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "Datos de inicio de sesi?n incompletos o inv?lidos.",
+        },
+      },
+      { status: 400 }
+    );
+  }
+
+  const normalizedEmail = parsed.data.email.trim().toLowerCase();
+  const db = getDb();
+  if (!db) {
+    return NextResponse.json<ApiResponse<null>>(
+      {
+        success: false,
+        error: {
+          code: "SERVICE_UNAVAILABLE",
+          message: "Servicio de autenticaci?n no disponible.",
+        },
+      },
+      { status: 503 }
+    );
+  }
+
+  // 3. Buscar usuario
+  const userList = await db
+    .select()
+    .from(users)
+    .where(eq(users.email, normalizedEmail))
+    .limit(1);
+
+  const genericAuthError = {
+    code: "INVALID_CREDENTIALS",
+    message: "Credenciales de acceso inv?lidas o usuario no autorizado.",
+  };
+
+  if (userList.length === 0) {
+    authRateLimiter.recordAttempt(`ip:${ipAddress}`);
+    await logAuditEvent({
+      action: "LOGIN_FAILED",
+      entityType: "users",
+      metadata: { email: normalizedEmail, reason: "USER_NOT_FOUND" },
+      ipAddress,
+    });
+    return NextResponse.json<ApiResponse<null>>(
+      { success: false, error: genericAuthError },
+      { status: 401 }
+    );
+  }
+
+  const user = userList[0];
+
+  // 4. Verificar si el usuario est? activo
+  if (!user.active) {
+    authRateLimiter.recordAttempt(`ip:${ipAddress}`);
+    await logAuditEvent({
+      userId: user.id,
+      action: "LOGIN_FAILED",
+      entityType: "users",
+      entityId: user.id,
+      metadata: { email: normalizedEmail, reason: "USER_INACTIVE" },
+      ipAddress,
+    });
+    return NextResponse.json<ApiResponse<null>>(
+      { success: false, error: genericAuthError },
+      { status: 401 }
+    );
+  }
+
+  // 5. Verificar contrase?a
+  const isPasswordValid = await verifyPassword(parsed.data.password, user.passwordHash);
+  if (!isPasswordValid) {
+    authRateLimiter.recordAttempt(`ip:${ipAddress}`);
+    await logAuditEvent({
+      userId: user.id,
+      action: "LOGIN_FAILED",
+      entityType: "users",
+      entityId: user.id,
+      metadata: { email: normalizedEmail, reason: "PASSWORD_MISMATCH" },
+      ipAddress,
+    });
+    return NextResponse.json<ApiResponse<null>>(
+      { success: false, error: genericAuthError },
+      { status: 401 }
+    );
+  }
+
+  // 6. Resetear rate limiter al tener ?xito
+  authRateLimiter.reset(`ip:${ipAddress}`);
+
+  // 7. Crear sesi?n
+  const sessionToken = await createSession(user.id, ipAddress, userAgent);
+
+  await logAuditEvent({
+    userId: user.id,
+    action: "LOGIN_SUCCESS",
+    entityType: "users",
+    entityId: user.id,
+    metadata: { email: normalizedEmail, role: user.role },
+    ipAddress,
+  });
+
+  const sanitizedUser: SanitizedUser = {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    warehouseId: user.warehouseId,
+    active: user.active,
+    createdAt: user.createdAt.toISOString(),
+    updatedAt: user.updatedAt.toISOString(),
+  };
+
+  const response = NextResponse.json<ApiResponse<{ user: SanitizedUser }>>(
+    {
+      success: true,
+      data: {
+        user: sanitizedUser,
+      },
+    },
+    { status: 200 }
+  );
+
+  const cookieOptions = getSessionCookieOptions(sessionToken);
+  response.cookies.set({
+    name: cookieOptions.name,
+    value: cookieOptions.value,
+    httpOnly: cookieOptions.httpOnly,
+    secure: cookieOptions.secure,
+    sameSite: cookieOptions.sameSite,
+    path: cookieOptions.path,
+    maxAge: cookieOptions.maxAge,
+  });
+
+  return response;
+}
