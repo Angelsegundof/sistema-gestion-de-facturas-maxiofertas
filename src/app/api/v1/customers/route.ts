@@ -158,7 +158,7 @@ export async function POST(request: NextRequest) {
         success: false,
         error: {
           code: "INVALID_RUT",
-          message: "El RUT ingresado no es v?lido.",
+          message: "El RUT ingresado no es v?lido seg?n el algoritmo m?dulo 11.",
         },
       },
       { status: 400 }
@@ -178,8 +178,8 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Safe concurrent insert with ON CONFLICT DO UPDATE (preserves single customer per canonical RUT)
-  const [customer] = await db
+  // Pol?tica segura: ON CONFLICT DO NOTHING para preservar inmutabilidad de datos maestros existentes
+  const insertedList = await db
     .insert(customers)
     .values({
       rutCanonical: canonicalRut,
@@ -190,31 +190,39 @@ export async function POST(request: NextRequest) {
       email: normalizedEmail,
       active: true,
     })
-    .onConflictDoUpdate({
+    .onConflictDoNothing({
       target: customers.rutCanonical,
-      set: {
-        legalName: parsed.data.legalName.trim(),
-        businessActivity: parsed.data.businessActivity.trim(),
-        phone: normalizedPhone,
-        email: normalizedEmail,
-        updatedAt: new Date(),
-      },
     })
     .returning();
 
-  await logAuditEvent({
-    userId: currentUser.id,
-    action: "USER_CREATED", // CUSTOMER_CREATED
-    entityType: "customers",
-    entityId: customer.id,
-    metadata: {
-      actionType: "CUSTOMER_CREATED",
-      rut: customer.rutCanonical,
-      legalName: customer.legalName,
-      createdBy: currentUser.email,
-    },
-    ipAddress,
-  });
+  let customer = insertedList[0];
+  const isNew = !!customer;
+
+  if (!customer) {
+    // Si ya exist?a el RUT, se recupera el cliente maestro existente SIN modificarlo
+    const existingList = await db
+      .select()
+      .from(customers)
+      .where(eq(customers.rutCanonical, canonicalRut))
+      .limit(1);
+
+    customer = existingList[0];
+  } else {
+    // Solo se audita la creaci?n si efectivamente se insert? un cliente nuevo
+    await logAuditEvent({
+      userId: currentUser.id,
+      action: "USER_CREATED", // CUSTOMER_CREATED
+      entityType: "customers",
+      entityId: customer.id,
+      metadata: {
+        actionType: "CUSTOMER_CREATED",
+        rut: customer.rutCanonical,
+        legalName: customer.legalName,
+        createdBy: currentUser.email,
+      },
+      ipAddress,
+    });
+  }
 
   const sanitized: SanitizedCustomer = {
     id: customer.id,
@@ -234,6 +242,6 @@ export async function POST(request: NextRequest) {
       success: true,
       data: { customer: sanitized },
     },
-    { status: 201 }
+    { status: isNew ? 201 : 200 }
   );
 }

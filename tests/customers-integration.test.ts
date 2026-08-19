@@ -59,53 +59,73 @@ describe("Customers Domain Integration & Concurrency Tests (Real PostgreSQL)", (
     ).rejects.toThrow();
   });
 
-  it("34. Concurrency test: Parallel requests creating the same RUT resolve to a single customer", async () => {
-    const rawRut = "11.111.111-1";
+  it("8. Concurrency test: Parallel requests creating same RUT preserve existing master data without overwrite", async () => {
+    const rawRut = "76.432.109-K";
     const canonical = normalizeRut(rawRut);
     const display = formatRut(rawRut);
 
-    const createCustomerSafe = async (legalName: string) => {
-      const [result] = await db
+    // 1. Existing customer in database
+    await db.insert(schema.customers).values({
+      rutCanonical: canonical,
+      rutDisplay: display,
+      legalName: "COMERCIAL ORIGINAL SPA",
+      businessActivity: "Giro Original",
+      active: true,
+    });
+
+    // 2. Helper implementing the safe ON CONFLICT DO NOTHING policy
+    const createCustomerSafe = async (attemptedLegalName: string) => {
+      const inserted = await db
         .insert(schema.customers)
         .values({
           rutCanonical: canonical,
           rutDisplay: display,
-          legalName,
+          legalName: attemptedLegalName,
           businessActivity: "Comercio",
           active: true,
         })
-        .onConflictDoUpdate({
+        .onConflictDoNothing({
           target: schema.customers.rutCanonical,
-          set: {
-            legalName,
-            updatedAt: new Date(),
-          },
         })
         .returning();
-      return result;
+
+      if (inserted.length > 0) {
+        return inserted[0];
+      }
+
+      // Fetch existing without modifying
+      const [existing] = await db
+        .select()
+        .from(schema.customers)
+        .where(eq(schema.customers.rutCanonical, canonical))
+        .limit(1);
+
+      return existing;
     };
 
+    // 3. Concurrent requests with different names
     const [resA, resB] = await Promise.all([
-      createCustomerSafe("Empresa A (Hilo 1)"),
-      createCustomerSafe("Empresa A (Hilo 2)"),
+      createCustomerSafe("NOMBRE A"),
+      createCustomerSafe("NOMBRE B"),
     ]);
 
     expect(resA.id).toBe(resB.id);
 
-    // Confirm only ONE record exists in PostgreSQL
+    // 4. Confirm only ONE record exists in PostgreSQL and master data is intact
     const allCustomers = await db
       .select()
       .from(schema.customers)
       .where(eq(schema.customers.rutCanonical, canonical));
 
     expect(allCustomers).toHaveLength(1);
-    expect(allCustomers[0].rutCanonical).toBe("111111111");
+    expect(allCustomers[0].rutCanonical).toBe("76432109K");
+    expect(allCustomers[0].legalName).toBe("COMERCIAL ORIGINAL SPA"); // Intact!
   });
 
   it("should query customer by canonical RUT and support autocompletion data retrieval", async () => {
     await db.insert(schema.customers).values({
-      rutCanonical: "55555555",
-      rutDisplay: "5.555.555-5",
+      rutCanonical: "55555559",
+      rutDisplay: "5.555.555-9",
       legalName: "Distribuidora del Sur Ltda",
       businessActivity: "Distribuci?n de Materiales",
       phone: "+56912345678",
@@ -116,7 +136,7 @@ describe("Customers Domain Integration & Concurrency Tests (Real PostgreSQL)", (
     const [found] = await db
       .select()
       .from(schema.customers)
-      .where(eq(schema.customers.rutCanonical, normalizeRut("5.555.555-5")))
+      .where(eq(schema.customers.rutCanonical, normalizeRut("5.555.555-9")))
       .limit(1);
 
     expect(found).toBeDefined();
