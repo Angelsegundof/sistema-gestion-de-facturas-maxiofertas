@@ -8,6 +8,7 @@ import {
   createSession,
   getSessionCookieOptions,
   logAuditEvent,
+  verifyCsrfOrigin,
   verifyPassword,
 } from "@/lib/auth";
 import { ApiResponse, SanitizedUser } from "@/types";
@@ -18,11 +19,26 @@ const loginSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
+  // 1. Verificaci?n CSRF / Same-Origin
+  const csrfCheck = verifyCsrfOrigin(request);
+  if (!csrfCheck.valid) {
+    return NextResponse.json<ApiResponse<null>>(
+      {
+        success: false,
+        error: {
+          code: "CSRF_FORBIDDEN",
+          message: csrfCheck.reason || "Petici?n no permitida por pol?tica de origen.",
+        },
+      },
+      { status: 403 }
+    );
+  }
+
   const ipAddress = request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "unknown";
   const userAgent = request.headers.get("user-agent") || "unknown";
 
-  // 1. Validar Rate Limit por IP
-  const rateCheck = authRateLimiter.isRateLimited(`ip:${ipAddress}`);
+  // 2. Validar Rate Limit distribuido por IP
+  const rateCheck = await authRateLimiter.isRateLimited(`ip:${ipAddress}`);
   if (rateCheck.limited) {
     const retrySeconds = Math.ceil(rateCheck.retryAfterMs / 1000);
     return NextResponse.json<ApiResponse<null>>(
@@ -37,7 +53,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // 2. Parsear body
+  // 3. Parsear body
   let body: unknown;
   try {
     body = await request.json();
@@ -83,7 +99,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // 3. Buscar usuario
+  // 4. Buscar usuario
   const userList = await db
     .select()
     .from(users)
@@ -96,7 +112,7 @@ export async function POST(request: NextRequest) {
   };
 
   if (userList.length === 0) {
-    authRateLimiter.recordAttempt(`ip:${ipAddress}`);
+    await authRateLimiter.recordAttempt(`ip:${ipAddress}`);
     await logAuditEvent({
       action: "LOGIN_FAILED",
       entityType: "users",
@@ -111,9 +127,9 @@ export async function POST(request: NextRequest) {
 
   const user = userList[0];
 
-  // 4. Verificar si el usuario est? activo
+  // 5. Verificar si el usuario est? activo
   if (!user.active) {
-    authRateLimiter.recordAttempt(`ip:${ipAddress}`);
+    await authRateLimiter.recordAttempt(`ip:${ipAddress}`);
     await logAuditEvent({
       userId: user.id,
       action: "LOGIN_FAILED",
@@ -128,10 +144,10 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // 5. Verificar contrase?a
+  // 6. Verificar contrase?a
   const isPasswordValid = await verifyPassword(parsed.data.password, user.passwordHash);
   if (!isPasswordValid) {
-    authRateLimiter.recordAttempt(`ip:${ipAddress}`);
+    await authRateLimiter.recordAttempt(`ip:${ipAddress}`);
     await logAuditEvent({
       userId: user.id,
       action: "LOGIN_FAILED",
@@ -146,10 +162,10 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // 6. Resetear rate limiter al tener ?xito
-  authRateLimiter.reset(`ip:${ipAddress}`);
+  // 7. Resetear rate limiter al tener ?xito
+  await authRateLimiter.reset(`ip:${ipAddress}`);
 
-  // 7. Crear sesi?n
+  // 8. Crear sesi?n
   const sessionToken = await createSession(user.id, ipAddress, userAgent);
 
   await logAuditEvent({

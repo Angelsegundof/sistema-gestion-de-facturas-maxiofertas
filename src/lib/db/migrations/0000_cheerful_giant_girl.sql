@@ -9,6 +9,13 @@ CREATE TABLE "audit_logs" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE "rate_limits" (
+	"key" varchar(255) PRIMARY KEY NOT NULL,
+	"count" integer DEFAULT 1 NOT NULL,
+	"last_attempt_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"reset_at" timestamp with time zone NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE "sessions" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"user_id" uuid NOT NULL,

@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, varchar, boolean, jsonb, uuid } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, varchar, boolean, jsonb, uuid, integer } from "drizzle-orm/pg-core";
 
 export const rolesEnum = [
   "WAREHOUSE_USER",
@@ -15,7 +15,7 @@ export const users = pgTable("users", {
   name: varchar("name", { length: 150 }).notNull(),
   passwordHash: varchar("password_hash", { length: 255 }).notNull(),
   role: varchar("role", { length: 50 }).notNull().$type<Role>(),
-  warehouseId: uuid("warehouse_id"),
+  warehouseId: uuid("warehouse_id"), // Referencia estructural a bodegas para Fase 3 (sin FK prematura)
   active: boolean("active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
@@ -44,9 +44,18 @@ export const auditLogs = pgTable("audit_logs", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+export const rateLimits = pgTable("rate_limits", {
+  key: varchar("key", { length: 255 }).primaryKey(),
+  count: integer("count").notNull().default(1),
+  lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }).defaultNow().notNull(),
+  resetAt: timestamp("reset_at", { withTimezone: true }).notNull(),
+});
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Session = typeof sessions.$inferSelect;
 export type NewSession = typeof sessions.$inferInsert;
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type NewAuditLog = typeof auditLogs.$inferInsert;
+export type RateLimit = typeof rateLimits.$inferSelect;
+export type NewRateLimit = typeof rateLimits.$inferInsert;

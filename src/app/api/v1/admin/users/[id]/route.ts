@@ -8,6 +8,8 @@ import {
   logAuditEvent,
   requireRole,
   revokeAllUserSessions,
+  validatePasswordPolicy,
+  verifyCsrfOrigin,
   AuthError,
 } from "@/lib/auth";
 import { ApiResponse, SanitizedUser } from "@/types";
@@ -17,13 +19,28 @@ const updateUserSchema = z.object({
   role: z.enum(rolesEnum).optional(),
   active: z.boolean().optional(),
   warehouseId: z.string().uuid().nullable().optional(),
-  password: z.string().min(8).optional(),
+  password: z.string().optional(),
 });
 
 export async function PATCH(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
+  // 1. Verificaci?n CSRF / Same-Origin
+  const csrfCheck = verifyCsrfOrigin(request);
+  if (!csrfCheck.valid) {
+    return NextResponse.json<ApiResponse<null>>(
+      {
+        success: false,
+        error: {
+          code: "CSRF_FORBIDDEN",
+          message: csrfCheck.reason || "Petici?n no permitida por pol?tica de origen.",
+        },
+      },
+      { status: 403 }
+    );
+  }
+
   let currentUser: SanitizedUser;
   try {
     currentUser = await requireRole(["ADMIN"]);
@@ -66,6 +83,22 @@ export async function PATCH(
       },
       { status: 400 }
     );
+  }
+
+  if (parsed.data.password) {
+    const passCheck = validatePasswordPolicy(parsed.data.password);
+    if (!passCheck.valid) {
+      return NextResponse.json<ApiResponse<null>>(
+        {
+          success: false,
+          error: {
+            code: "WEAK_PASSWORD",
+            message: passCheck.message || "La contrase?a no cumple con las pol?ticas de seguridad.",
+          },
+        },
+        { status: 400 }
+      );
+    }
   }
 
   const db = getDb();
@@ -119,10 +152,12 @@ export async function PATCH(
 
   const updatedUser = updatedList[0];
 
-  // Si el usuario fue deshabilitado o cambi? su rol, revocar todas sus sesiones activas inmediatamente
+  // Si el usuario fue deshabilitado, cambi? su rol o cambi? su contrase?a:
+  // Revocar todas sus sesiones activas inmediatamente
   const shouldRevokeSessions =
     (parsed.data.active !== undefined && !parsed.data.active) ||
-    (parsed.data.role !== undefined && parsed.data.role !== targetUser.role);
+    (parsed.data.role !== undefined && parsed.data.role !== targetUser.role) ||
+    parsed.data.password !== undefined;
 
   if (shouldRevokeSessions) {
     await revokeAllUserSessions(id);

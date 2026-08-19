@@ -7,6 +7,8 @@ import {
   hashPassword,
   logAuditEvent,
   requireRole,
+  validatePasswordPolicy,
+  verifyCsrfOrigin,
   AuthError,
 } from "@/lib/auth";
 import { ApiResponse, SanitizedUser } from "@/types";
@@ -14,7 +16,7 @@ import { ApiResponse, SanitizedUser } from "@/types";
 const createUserSchema = z.object({
   email: z.string().email("Formato de correo inv?lido"),
   name: z.string().min(2, "El nombre debe tener al menos 2 caracteres").max(150),
-  password: z.string().min(8, "La contrase?a debe tener al menos 8 caracteres"),
+  password: z.string().min(1, "La contrase?a es requerida"),
   role: z.enum(rolesEnum),
   warehouseId: z.string().uuid().nullable().optional(),
 });
@@ -65,6 +67,21 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // 1. Verificaci?n CSRF / Same-Origin
+  const csrfCheck = verifyCsrfOrigin(request);
+  if (!csrfCheck.valid) {
+    return NextResponse.json<ApiResponse<null>>(
+      {
+        success: false,
+        error: {
+          code: "CSRF_FORBIDDEN",
+          message: csrfCheck.reason || "Petici?n no permitida por pol?tica de origen.",
+        },
+      },
+      { status: 403 }
+    );
+  }
+
   let currentUser: SanitizedUser;
   try {
     currentUser = await requireRole(["ADMIN"]);
@@ -102,6 +119,21 @@ export async function POST(request: NextRequest) {
           code: "VALIDATION_ERROR",
           message: "Datos de usuario inv?lidos.",
           details: parsed.error.flatten().fieldErrors,
+        },
+      },
+      { status: 400 }
+    );
+  }
+
+  // 2. Validaci?n de pol?tica de contrase?as
+  const passCheck = validatePasswordPolicy(parsed.data.password);
+  if (!passCheck.valid) {
+    return NextResponse.json<ApiResponse<null>>(
+      {
+        success: false,
+        error: {
+          code: "WEAK_PASSWORD",
+          message: passCheck.message || "La contrase?a no cumple con las pol?ticas de seguridad.",
         },
       },
       { status: 400 }
