@@ -9,13 +9,35 @@ export const rolesEnum = [
 
 export type Role = (typeof rolesEnum)[number];
 
+export const warehouses = pgTable("warehouses", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  code: varchar("code", { length: 50 }).notNull().unique(),
+  name: varchar("name", { length: 150 }).notNull(),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const customers = pgTable("customers", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  rutCanonical: varchar("rut_canonical", { length: 20 }).notNull().unique(),
+  rutDisplay: varchar("rut_display", { length: 20 }).notNull(),
+  legalName: varchar("legal_name", { length: 200 }).notNull(),
+  businessActivity: varchar("business_activity", { length: 250 }).notNull(),
+  phone: varchar("phone", { length: 50 }),
+  email: varchar("email", { length: 320 }),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 export const users = pgTable("users", {
   id: uuid("id").defaultRandom().primaryKey(),
   email: varchar("email", { length: 320 }).notNull().unique(),
   name: varchar("name", { length: 150 }).notNull(),
   passwordHash: varchar("password_hash", { length: 255 }).notNull(),
   role: varchar("role", { length: 50 }).notNull().$type<Role>(),
-  warehouseId: uuid("warehouse_id"), // Referencia estructural a bodegas para Fase 3 (sin FK prematura)
+  warehouseId: uuid("warehouse_id").references(() => warehouses.id, { onDelete: "set null" }),
   active: boolean("active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
@@ -51,6 +73,10 @@ export const rateLimits = pgTable("rate_limits", {
   resetAt: timestamp("reset_at", { withTimezone: true }).notNull(),
 });
 
+export type Warehouse = typeof warehouses.$inferSelect;
+export type NewWarehouse = typeof warehouses.$inferInsert;
+export type Customer = typeof customers.$inferSelect;
+export type NewCustomer = typeof customers.$inferInsert;
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Session = typeof sessions.$inferSelect;

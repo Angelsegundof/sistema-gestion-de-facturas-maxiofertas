@@ -26,7 +26,33 @@ export type Permission =
   | "AUDIT_VIEW"
   | "USER_MANAGE"
   | "WAREHOUSE_MANAGE"
-  | "USER_STATUS_CHANGE";
+  | "USER_STATUS_CHANGE"
+  | "WAREHOUSE_VIEW"
+  | "CUSTOMER_VIEW"
+  | "CUSTOMER_CREATE"
+  | "CUSTOMER_MANAGE";
+
+export interface SanitizedWarehouse {
+  id: string;
+  code: string;
+  name: string;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SanitizedCustomer {
+  id: string;
+  rut: string; // Formato display (ej: 76.123.456-7)
+  rutCanonical: string; // Formato can?nico (ej: 761234567)
+  legalName: string;
+  businessActivity: string;
+  phone: string | null;
+  email: string | null;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface SanitizedUser {
   id: string;
@@ -34,6 +60,7 @@ export interface SanitizedUser {
   name: string;
   role: Role;
   warehouseId: string | null;
+  warehouse?: SanitizedWarehouse | null;
   active: boolean;
   createdAt: string;
   updatedAt: string;

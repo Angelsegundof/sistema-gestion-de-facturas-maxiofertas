@@ -14,6 +14,9 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "REQUEST_CANCEL",
     "INVOICE_VIEW",
     "RECTIFICATION_REQUEST",
+    "WAREHOUSE_VIEW",
+    "CUSTOMER_VIEW",
+    "CUSTOMER_CREATE",
   ],
   INVOICE_EXECUTOR: [
     "AUTH_LOGIN",
@@ -32,6 +35,9 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "INVOICE_CORRECTED_GENERATE",
     "RECTIFICATION_FINALIZE",
     "STATS_VIEW",
+    "WAREHOUSE_VIEW",
+    "CUSTOMER_VIEW",
+    "CUSTOMER_CREATE",
   ],
   MANAGEMENT: [
     "AUTH_LOGIN",
@@ -40,6 +46,8 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "INVOICE_VIEW",
     "STATS_VIEW",
     "AUDIT_VIEW",
+    "WAREHOUSE_VIEW",
+    "CUSTOMER_VIEW",
   ],
   ADMIN: [
     "AUTH_LOGIN",
@@ -68,6 +76,10 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "USER_MANAGE",
     "WAREHOUSE_MANAGE",
     "USER_STATUS_CHANGE",
+    "WAREHOUSE_VIEW",
+    "CUSTOMER_VIEW",
+    "CUSTOMER_CREATE",
+    "CUSTOMER_MANAGE",
   ],
 } as const;
 
