@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import DevQaSwitcher from "@/components/DevQaSwitcher";
 
 export const metadata: Metadata = {
   title: "Sistema de Gestión de Facturas — Maxiofertas",
@@ -15,6 +16,7 @@ export default function RootLayout({
     <html lang="es">
       <body className="antialiased min-h-screen bg-slate-50 text-slate-900">
         {children}
+        <DevQaSwitcher />
       </body>
     </html>
   );

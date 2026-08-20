@@ -113,11 +113,45 @@ export default function LoginPage() {
             disabled={loading}
             className="w-full mt-2 rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 transition-colors"
           >
-            {loading ? "Iniciando sesi?n..." : "Ingresar al Sistema"}
+            {loading ? "Iniciando sesión..." : "Ingresar al Sistema"}
           </button>
         </form>
 
-        <div className="mt-8 pt-6 border-t border-slate-100 text-center text-xs text-slate-400">
+        {process.env.NODE_ENV === "development" && (
+          <div className="mt-6 rounded-xl bg-amber-50 p-4 border border-amber-200">
+            <div className="flex items-center gap-1.5 font-bold text-xs text-amber-900 mb-2">
+              <span>🧪</span>
+              <span>Acceso Rápido QA Local (Desarrollo)</span>
+            </div>
+            <p className="text-[11px] text-amber-800 mb-3">
+              Haz clic en cualquier rol para auto-completar credenciales e ingresar:
+            </p>
+            <div className="grid grid-cols-1 gap-1.5">
+              {[
+                { email: "solicitante@maxiofertas.cl", label: "🏢 Solicitante Central", desc: "Bodega Santiago" },
+                { email: "solicitante.norte@maxiofertas.cl", label: "🏢 Solicitante Norte", desc: "Bodega Norte" },
+                { email: "ejecutor@maxiofertas.cl", label: "⚙️ Ejecutor de Facturación", desc: "Mesa de Facturación" },
+                { email: "jefatura@maxiofertas.cl", label: "📊 Jefatura de Operaciones", desc: "Reportes / Estadísticas" },
+                { email: "admin@maxiofertas.cl", label: "🛡️ Administrador", desc: "Acceso Total" },
+              ].map((q) => (
+                <button
+                  key={q.email}
+                  type="button"
+                  onClick={() => {
+                    setEmail(q.email);
+                    setPassword("QA_password123!");
+                  }}
+                  className="flex items-center justify-between rounded-lg bg-white p-2 border border-amber-200 hover:border-amber-400 text-left text-xs text-slate-800 shadow-2xs hover:bg-amber-100/50 transition-all"
+                >
+                  <span className="font-semibold text-slate-900">{q.label}</span>
+                  <span className="text-[10px] text-slate-500">{q.desc}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="mt-6 pt-4 border-t border-slate-100 text-center text-xs text-slate-400">
           Acceso exclusivo para personal autorizado de Maxiofertas.
         </div>
       </div>

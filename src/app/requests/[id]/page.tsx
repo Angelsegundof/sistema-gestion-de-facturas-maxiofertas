@@ -1,6 +1,6 @@
-﻿"use client";
+"use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { formatCLP } from "@/domain/pricing";
@@ -37,34 +37,43 @@ export default function ViewInvoiceRequestPage() {
   const [comment, setComment] = useState("");
   const [submittingRect, setSubmittingRect] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
-
-  const loadData = async () => {
-    if (!requestId) return;
-    try {
-      const res = await fetch(`/api/v1/invoice-requests/${requestId}`);
-      const data = await res.json();
-      if (data.success && data.data?.request) {
-        setRequestData(data.data.request);
-      } else {
-        setError(data.error?.message || "No se encontró la solicitud de factura.");
-      }
-
-      // Load timeline
-      const timeRes = await fetch(`/api/v1/invoice-requests/${requestId}/timeline`);
-      const timeData = await timeRes.json();
-      if (timeData.success && timeData.data?.events) {
-        setTimeline(timeData.data.events);
-      }
-    } catch {
-      setError("Error de comunicación al consultar la solicitud.");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   useEffect(() => {
-    loadData();
-  }, [requestId]);
+    let isMounted = true;
+    async function fetchData() {
+      if (!requestId) return;
+      try {
+        const res = await fetch(`/api/v1/invoice-requests/${requestId}`);
+        const data = await res.json();
+        if (!isMounted) return;
+
+        if (data.success && data.data?.request) {
+          setRequestData(data.data.request);
+        } else {
+          setError(data.error?.message || "No se encontró la solicitud de factura.");
+        }
+
+        // Load timeline
+        const timeRes = await fetch(`/api/v1/invoice-requests/${requestId}/timeline`);
+        const timeData = await timeRes.json();
+        if (!isMounted) return;
+
+        if (timeData.success && timeData.data?.events) {
+          setTimeline(timeData.data.events);
+        }
+      } catch {
+        if (isMounted) setError("Error de comunicación al consultar la solicitud.");
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+
+    fetchData();
+    return () => {
+      isMounted = false;
+    };
+  }, [requestId, refreshTrigger]);
 
   const handleSubmitRectification = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,20 +83,15 @@ export default function ViewInvoiceRequestPage() {
     try {
       const res = await fetch(`/api/v1/invoice-requests/${requestId}/rectification`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          reason: selectedReason,
-          comment: comment.trim() || undefined,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: selectedReason, comment }),
       });
       const data = await res.json();
 
       if (data.success) {
         setIsModalOpen(false);
         setComment("");
-        await loadData();
+        setRefreshTrigger((prev) => prev + 1);
       } else {
         setModalError(data.error?.message || "No fue posible registrar la solicitud de cambio.");
       }
