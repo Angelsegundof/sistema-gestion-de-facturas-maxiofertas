@@ -56,6 +56,36 @@ export type RequestCorrectionReason =
   | "DUPLICATE_REQUEST"
   | "OTHER";
 
+export const documentTypesEnum = [
+  "INVOICE",
+  "CREDIT_NOTE",
+  "XML_DTE",
+  "OTHER",
+] as const;
+
+export type DocumentType = (typeof documentTypesEnum)[number];
+
+export const storageProvidersEnum = ["R2", "GOOGLE_DRIVE"] as const;
+
+export type StorageProvider = (typeof storageProvidersEnum)[number];
+
+export interface SanitizedDocument {
+  id: string;
+  documentType: DocumentType;
+  storageProvider: StorageProvider;
+  storageKey: string;
+  externalUrl?: string | null;
+  fileName: string;
+  mimeType: string;
+  fileSize: number;
+  invoiceRequestId: string | null;
+  creditNoteId?: string | null;
+  uploadedBy: string;
+  uploadedByName?: string;
+  createdAt: string;
+  accessUrl?: string;
+}
+
 export interface SanitizedWarehouse {
   id: string;
   code: string;
@@ -160,6 +190,7 @@ export interface SanitizedInvoiceRequest {
   age?: AgeIndicator;
   items?: SanitizedInvoiceRequestItem[];
   corrections?: SanitizedRequestCorrection[];
+  document?: SanitizedDocument | null;
 }
 
 export interface DuplicateCandidate {

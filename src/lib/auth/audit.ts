@@ -23,7 +23,11 @@ export type AuditAction =
   | "REQUEST_CORRECTION_REQUESTED"
   | "REQUEST_RESUBMITTED"
   | "REQUEST_REASSIGNED"
-  | "REQUEST_RECONCILED";
+  | "REQUEST_RECONCILED"
+  | "INVOICE_UPLOADED"
+  | "INVOICE_REPLACED"
+  | "INVOICE_COMPLETED"
+  | "DOCUMENT_ACCESSED";
 
 export interface LogAuditParams {
   userId?: string | null;

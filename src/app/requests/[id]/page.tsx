@@ -85,12 +85,38 @@ export default function ViewInvoiceRequestPage() {
           {getStatusBadge()}
         </div>
 
+        {/* Completed Action Banner with PDF link */}
+        {requestData.status === "COMPLETED" && (
+          <div className="bg-emerald-50 border-2 border-emerald-300 rounded-2xl p-6 shadow-sm space-y-3">
+            <div className="flex items-center gap-2 text-emerald-800 text-sm font-bold uppercase tracking-wider">
+              <span>✓</span>
+              <span>Factura emitida y disponible</span>
+            </div>
+            <p className="text-xs text-emerald-900">
+              Esta factura ya fue procesada por el equipo de facturación. Puedes visualizar o descargar el PDF oficial.
+            </p>
+            {requestData.document?.accessUrl && (
+              <div className="pt-1">
+                <a
+                  href={requestData.document.accessUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 py-2.5 px-5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl shadow-sm transition"
+                >
+                  <span>📄</span>
+                  <span>Ver factura emitida (PDF)</span>
+                </a>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Needs Correction Action Banner */}
         {requestData.status === "NEEDS_CORRECTION" && (
           <div className="bg-rose-50 border-2 border-rose-300 rounded-2xl p-6 shadow-sm space-y-3">
             <div className="flex items-center gap-2 text-rose-800 text-sm font-bold uppercase tracking-wider">
-              <span>?</span>
-              <span>Esta solicitud necesita una correcci?n</span>
+              <span>⚠</span>
+              <span>Esta solicitud necesita una corrección</span>
             </div>
             {latestCorrection && (
               <div className="text-xs text-slate-800 space-y-1">

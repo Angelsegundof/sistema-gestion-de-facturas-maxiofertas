@@ -29,6 +29,13 @@
       "when": 1787237394612,
       "tag": "0003_rapid_boomerang",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1787241585167,
+      "tag": "0004_wet_mulholland_black",
+      "breakpoints": true
     }
   ]
 }

@@ -64,6 +64,19 @@ export const requestCorrectionReasons = [
 
 export type RequestCorrectionReason = (typeof requestCorrectionReasons)[number];
 
+export const documentTypesEnum = [
+  "INVOICE",
+  "CREDIT_NOTE",
+  "XML_DTE",
+  "OTHER",
+] as const;
+
+export type DocumentType = (typeof documentTypesEnum)[number];
+
+export const storageProvidersEnum = ["R2", "GOOGLE_DRIVE"] as const;
+
+export type StorageProvider = (typeof storageProvidersEnum)[number];
+
 export const warehouses = pgTable("warehouses", {
   id: uuid("id").defaultRandom().primaryKey(),
   code: varchar("code", { length: 50 }).notNull().unique(),
@@ -203,6 +216,30 @@ export const requestCorrections = pgTable("request_corrections", {
   resolvedAt: timestamp("resolved_at", { withTimezone: true }),
 });
 
+export const documents = pgTable(
+  "documents",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    documentType: varchar("document_type", { length: 50 }).notNull().$type<DocumentType>(),
+    storageProvider: varchar("storage_provider", { length: 50 }).notNull().default("R2").$type<StorageProvider>(),
+    storageKey: text("storage_key").notNull(),
+    externalUrl: text("external_url"),
+    fileName: varchar("file_name", { length: 500 }).notNull(),
+    mimeType: varchar("mime_type", { length: 100 }).notNull(),
+    fileSize: bigint("file_size", { mode: "number" }).notNull(),
+    invoiceRequestId: uuid("invoice_request_id").references(() => invoiceRequests.id, { onDelete: "cascade" }),
+    creditNoteId: uuid("credit_note_id"),
+    uploadedBy: uuid("uploaded_by")
+      .notNull()
+      .references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("documents_invoice_request_id_idx").on(table.invoiceRequestId),
+    index("documents_document_type_idx").on(table.documentType),
+  ]
+);
+
 export type Warehouse = typeof warehouses.$inferSelect;
 export type NewWarehouse = typeof warehouses.$inferInsert;
 export type Customer = typeof customers.$inferSelect;
@@ -221,3 +258,5 @@ export type InvoiceRequestItem = typeof invoiceRequestItems.$inferSelect;
 export type NewInvoiceRequestItem = typeof invoiceRequestItems.$inferInsert;
 export type RequestCorrection = typeof requestCorrections.$inferSelect;
 export type NewRequestCorrection = typeof requestCorrections.$inferInsert;
+export type Document = typeof documents.$inferSelect;
+export type NewDocument = typeof documents.$inferInsert;

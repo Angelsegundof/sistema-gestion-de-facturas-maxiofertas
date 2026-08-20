@@ -1,15 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq, desc } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import {
   invoiceRequests,
   invoiceRequestItems,
   requestCorrections,
+  documents,
   warehouses,
   users,
 } from "@/lib/db/schema";
 import { requireAuth, AuthError } from "@/lib/auth";
 import { sanitizeQueueInvoiceRequest } from "@/lib/services/invoice-queue";
+import { sanitizeDocument } from "@/lib/services/invoice-documents";
+import { r2Client } from "@/lib/r2/client";
 import { ApiResponse, SanitizedInvoiceRequest } from "@/types";
 
 export async function GET(
@@ -139,6 +142,26 @@ export async function GET(
       ...c,
       requestedByName: correctionsList[idx]?.requestedByName || "Ejecutor",
     }));
+  }
+
+  // Populate attached invoice document if present
+  const docList = await db
+    .select()
+    .from(documents)
+    .where(
+      and(
+        eq(documents.invoiceRequestId, targetReq.id),
+        eq(documents.documentType, "INVOICE")
+      )
+    )
+    .limit(1);
+
+  if (docList.length > 0) {
+    const accessUrl = await r2Client.generatePresignedDownloadUrl({
+      key: docList[0].storageKey,
+      expiresInSeconds: 900,
+    });
+    sanitized.document = sanitizeDocument(docList[0], accessUrl);
   }
 
   return NextResponse.json<ApiResponse<{ request: SanitizedInvoiceRequest }>>(

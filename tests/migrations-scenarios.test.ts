@@ -32,6 +32,11 @@ describe("PostgreSQL Migrations Scenarios (Real PostgreSQL)", () => {
       await db.exec(st);
     }
 
+    const m4 = readMigration("0004_wet_mulholland_black.sql");
+    for (const st of m4.split("--> statement-breakpoint").filter((s) => s.trim())) {
+      await db.exec(st);
+    }
+
     const tablesRes = await db.query<{ table_name: string }>(
       "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name;"
     );
@@ -39,6 +44,7 @@ describe("PostgreSQL Migrations Scenarios (Real PostgreSQL)", () => {
 
     expect(tables).toContain("audit_logs");
     expect(tables).toContain("customers");
+    expect(tables).toContain("documents");
     expect(tables).toContain("invoice_request_items");
     expect(tables).toContain("invoice_requests");
     expect(tables).toContain("rate_limits");
@@ -47,13 +53,13 @@ describe("PostgreSQL Migrations Scenarios (Real PostgreSQL)", () => {
     expect(tables).toContain("users");
     expect(tables).toContain("warehouses");
 
-    // Verify foreign keys from request_corrections
-    const fkRes = await db.query<{ constraint_name: string }>(
-      "SELECT constraint_name FROM information_schema.table_constraints WHERE table_name = 'request_corrections' AND constraint_type = 'FOREIGN KEY';"
+    // Verify foreign keys from documents
+    const docFkRes = await db.query<{ constraint_name: string }>(
+      "SELECT constraint_name FROM information_schema.table_constraints WHERE table_name = 'documents' AND constraint_type = 'FOREIGN KEY';"
     );
-    const fkNames = fkRes.rows.map((r) => r.constraint_name);
-    expect(fkNames).toContain("request_corrections_invoice_request_id_invoice_requests_id_fk");
-    expect(fkNames).toContain("request_corrections_requested_by_users_id_fk");
+    const docFkNames = docFkRes.rows.map((r) => r.constraint_name);
+    expect(docFkNames).toContain("documents_invoice_request_id_invoice_requests_id_fk");
+    expect(docFkNames).toContain("documents_uploaded_by_users_id_fk");
   });
 
   it("Scenario B: Upgrade from Phase 4 schema to Phase 5 with existing data preservation", async () => {
