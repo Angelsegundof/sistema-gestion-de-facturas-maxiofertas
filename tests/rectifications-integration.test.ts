@@ -1,4 +1,4 @@
-﻿import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
 import * as fs from "fs";
 import * as path from "path";
@@ -88,6 +88,7 @@ describe("Fase 8: Rectificaciones y Notas de Crédito (Integration)", () => {
       "0003_rapid_boomerang.sql",
       "0004_wet_mulholland_black.sql",
       "0005_uneven_lady_bullseye.sql",
+      "0006_shallow_skaar.sql",
     ];
 
     for (const m of migrations) {

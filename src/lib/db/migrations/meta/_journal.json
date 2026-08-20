@@ -43,6 +43,13 @@
       "when": 1787246090933,
       "tag": "0005_uneven_lady_bullseye",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787254487759,
+      "tag": "0006_shallow_skaar",
+      "breakpoints": true
     }
   ]
 }

@@ -42,6 +42,11 @@ describe("PostgreSQL Migrations Scenarios (Real PostgreSQL)", () => {
       await db.exec(st);
     }
 
+    const m6 = readMigration("0006_shallow_skaar.sql");
+    for (const st of m6.split("--> statement-breakpoint").filter((s) => s.trim())) {
+      await db.exec(st);
+    }
+
     const tablesRes = await db.query<{ table_name: string }>(
       "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name;"
     );
@@ -53,6 +58,7 @@ describe("PostgreSQL Migrations Scenarios (Real PostgreSQL)", () => {
     expect(tables).toContain("documents");
     expect(tables).toContain("invoice_request_items");
     expect(tables).toContain("invoice_requests");
+    expect(tables).toContain("migration_records");
     expect(tables).toContain("rate_limits");
     expect(tables).toContain("rectifications");
     expect(tables).toContain("request_corrections");

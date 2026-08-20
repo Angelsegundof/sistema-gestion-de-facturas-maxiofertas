@@ -195,6 +195,7 @@ export const invoiceRequests = pgTable(
     duplicateOverride: boolean("duplicate_override").notNull().default(false),
     duplicateOf: uuid("duplicate_of").references((): AnyPgColumn => invoiceRequests.id),
     source: varchar("source", { length: 50 }).notNull().default("NATIVE").$type<InvoiceRequestSource>(),
+    legacySourceId: varchar("legacy_source_id", { length: 255 }),
     idempotencyKey: varchar("idempotency_key", { length: 255 }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     assignedAt: timestamp("assigned_at", { withTimezone: true }),
@@ -205,6 +206,7 @@ export const invoiceRequests = pgTable(
     unique("invoice_requests_user_idempotency_unique").on(table.requestedBy, table.idempotencyKey),
     index("invoice_requests_status_created_at_idx").on(table.status, table.createdAt),
     index("invoice_requests_assigned_to_idx").on(table.assignedTo),
+    index("invoice_requests_legacy_source_id_idx").on(table.legacySourceId),
   ]
 );
 
@@ -332,6 +334,25 @@ export const rectifications = pgTable(
   ]
 );
 
+export const migrationRecords = pgTable(
+  "migration_records",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    source: varchar("source", { length: 100 }).notNull(),
+    sourceRowId: varchar("source_row_id", { length: 200 }),
+    entityType: varchar("entity_type", { length: 100 }).notNull(),
+    entityId: uuid("entity_id"),
+    status: varchar("status", { length: 50 }).notNull().$type<"IMPORTED" | "SKIPPED" | "FAILED" | "MANUAL_REVIEW">(),
+    errorMessage: text("error_message"),
+    rawPayload: jsonb("raw_payload"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("migration_records_source_row_id_idx").on(table.source, table.sourceRowId),
+    index("migration_records_status_idx").on(table.status),
+  ]
+);
+
 export type Warehouse = typeof warehouses.$inferSelect;
 export type NewWarehouse = typeof warehouses.$inferInsert;
 export type Customer = typeof customers.$inferSelect;
@@ -356,3 +377,6 @@ export type CreditNote = typeof creditNotes.$inferSelect;
 export type NewCreditNote = typeof creditNotes.$inferInsert;
 export type Rectification = typeof rectifications.$inferSelect;
 export type NewRectification = typeof rectifications.$inferInsert;
+export type MigrationRecord = typeof migrationRecords.$inferSelect;
+export type NewMigrationRecord = typeof migrationRecords.$inferInsert;
+
