@@ -6,21 +6,50 @@
 
 import { ReconciliationStatus } from "./types";
 
-export const DEFAULT_VAT_RATE_PERCENT = 19.0;
+export const DEFAULT_VAT_RATE_PERCENT = 19;
 
 /**
- * Calcula el precio unitario neto para el SII a partir del precio unitario bruto (IVA incluido).
- * F?rmula: unitPriceNet = ROUND_HALF_UP(unitPriceGross / (1 + vatRate / 100))
+ * Calcula el precio unitario neto para el SII a partir del precio unitario bruto (IVA incluido)
+ * mediante aritmética entera exacta con redondeo simétrico al entero más cercano (ROUND_HALF_UP).
+ *
+ * Fórmula matemática exacta:
+ *   net = round(gross * 100 / (100 + vatRate))
+ *
+ * En aritmética entera exacta para enteros positivos:
+ *   divisor = 100n + BigInt(vatRatePercent)
+ *   net = (BigInt(gross) * 100n + (divisor / 2n)) / divisor
  */
 export function calculateNetPrice(
   unitPriceGross: number,
   vatRatePercent: number = DEFAULT_VAT_RATE_PERCENT
 ): number {
-  if (unitPriceGross <= 0 || !Number.isInteger(unitPriceGross)) {
-    throw new Error("El precio bruto unitario debe ser un entero positivo.");
+  if (
+    typeof unitPriceGross !== "number" ||
+    !Number.isSafeInteger(unitPriceGross) ||
+    unitPriceGross <= 0
+  ) {
+    throw new Error("El precio bruto unitario debe ser un entero positivo seguro.");
   }
-  const divisor = 1 + vatRatePercent / 100;
-  return Math.round(unitPriceGross / divisor);
+  if (
+    typeof vatRatePercent !== "number" ||
+    !Number.isSafeInteger(vatRatePercent) ||
+    vatRatePercent < 0
+  ) {
+    throw new Error("La tasa de IVA debe ser un entero positivo seguro.");
+  }
+
+  const grossBig = BigInt(unitPriceGross);
+  const vatBig = BigInt(vatRatePercent);
+  const divisorBig = 100n + vatBig;
+
+  // Exact integer ROUND_HALF_UP: adding half the divisor (119 / 2 = 59) before integer division
+  const netBig = (grossBig * 100n + divisorBig / 2n) / divisorBig;
+
+  const result = Number(netBig);
+  if (!Number.isSafeInteger(result)) {
+    throw new Error("El resultado del cálculo neto supera el rango de enteros seguros.");
+  }
+  return result;
 }
 
 export interface CalculatedItem {

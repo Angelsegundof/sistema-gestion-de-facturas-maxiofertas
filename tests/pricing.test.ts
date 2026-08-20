@@ -7,25 +7,35 @@ import {
   formatCLP,
 } from "@/domain/pricing";
 
-describe("Domain Pricing and Rounding Standards (CLP & Modulo Tributario)", () => {
-  it("should calculate exact unit net price using ROUND_HALF_UP", () => {
-    // 28.000 / 1.19 = 23.529,411... -> 23.529
+describe("Domain Pricing and Exact Integer Rounding Standards (CLP & Modulo Tributario)", () => {
+  it("should calculate exact unit net price using exact integer ROUND_HALF_UP arithmetic", () => {
+    // 28.000 * 100 / 119 = 2.800.000 / 119 = 23.529,411... -> 23.529
     expect(calculateNetPrice(28000)).toBe(23529);
 
-    // 12.000 / 1.19 = 10.084,033... -> 10.084
+    // 12.000 * 100 / 119 = 1.200.000 / 119 = 10.084,033... -> 10.084
     expect(calculateNetPrice(12000)).toBe(10084);
 
-    // 119.000 / 1.19 = 100.000
+    // 119.000 * 100 / 119 = 11.900.000 / 119 = 100.000
     expect(calculateNetPrice(119000)).toBe(100000);
 
-    // 10.000 / 1.19 = 8.403,36... -> 8.403
+    // 10.000 * 100 / 119 = 1.000.000 / 119 = 8.403,36... -> 8.403
     expect(calculateNetPrice(10000)).toBe(8403);
+
+    // Boundary tests
+    expect(calculateNetPrice(1)).toBe(1); // (100 + 59)/119 = 1
+    expect(calculateNetPrice(119)).toBe(100);
+    expect(calculateNetPrice(118)).toBe(99);
+    expect(calculateNetPrice(120)).toBe(101);
+
+    // High monetary amount without overflow
+    expect(calculateNetPrice(1000000000)).toBe(840336134);
   });
 
-  it("should reject negative or non-integer gross prices", () => {
+  it("should reject negative, zero, non-integer or unsafe integer gross prices", () => {
     expect(() => calculateNetPrice(0)).toThrow();
     expect(() => calculateNetPrice(-500)).toThrow();
     expect(() => calculateNetPrice(28000.5)).toThrow();
+    expect(() => calculateNetPrice(Number.MAX_SAFE_INTEGER + 10)).toThrow();
   });
 
   it("should accurately compute structured product lines", () => {
