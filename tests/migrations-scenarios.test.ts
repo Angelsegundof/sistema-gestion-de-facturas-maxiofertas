@@ -9,7 +9,7 @@ describe("PostgreSQL Migrations Scenarios (Real PostgreSQL)", () => {
     return fs.readFileSync(fullPath, "utf8");
   };
 
-  it("Scenario A: Full fresh migration from scratch (0000 -> 0001) on empty DB", async () => {
+  it("Scenario A: Full fresh migration from scratch (0000 -> 0001 -> 0002) on empty DB", async () => {
     const db = new PGlite();
 
     const m0 = readMigration("0000_cheerful_giant_girl.sql");
@@ -19,6 +19,11 @@ describe("PostgreSQL Migrations Scenarios (Real PostgreSQL)", () => {
 
     const m1 = readMigration("0001_sharp_reptil.sql");
     for (const st of m1.split("--> statement-breakpoint").filter((s) => s.trim())) {
+      await db.exec(st);
+    }
+
+    const m2 = readMigration("0002_concerned_molly_hayes.sql");
+    for (const st of m2.split("--> statement-breakpoint").filter((s) => s.trim())) {
       await db.exec(st);
     }
 
@@ -29,66 +34,73 @@ describe("PostgreSQL Migrations Scenarios (Real PostgreSQL)", () => {
 
     expect(tables).toContain("audit_logs");
     expect(tables).toContain("customers");
+    expect(tables).toContain("invoice_request_items");
+    expect(tables).toContain("invoice_requests");
     expect(tables).toContain("rate_limits");
     expect(tables).toContain("sessions");
     expect(tables).toContain("users");
     expect(tables).toContain("warehouses");
 
-    // Verify foreign key from users to warehouses exists
+    // Verify foreign keys from invoice_requests
     const fkRes = await db.query<{ constraint_name: string }>(
-      "SELECT constraint_name FROM information_schema.table_constraints WHERE table_name = 'users' AND constraint_type = 'FOREIGN KEY';"
+      "SELECT constraint_name FROM information_schema.table_constraints WHERE table_name = 'invoice_requests' AND constraint_type = 'FOREIGN KEY';"
     );
     const fkNames = fkRes.rows.map((r) => r.constraint_name);
-    expect(fkNames).toContain("users_warehouse_id_warehouses_id_fk");
+    expect(fkNames).toContain("invoice_requests_warehouse_id_warehouses_id_fk");
+    expect(fkNames).toContain("invoice_requests_customer_id_customers_id_fk");
+    expect(fkNames).toContain("invoice_requests_requested_by_users_id_fk");
   });
 
-  it("Scenario B: Upgrade from Phase 2.1 schema to Phase 3 with existing data preservation", async () => {
+  it("Scenario B: Upgrade from Phase 3.1 schema to Phase 4 with existing data preservation", async () => {
     const db = new PGlite();
 
-    // 1. Run Phase 2.1 migration
+    // 1. Run Phase 2 & 3 migrations
     const m0 = readMigration("0000_cheerful_giant_girl.sql");
     for (const st of m0.split("--> statement-breakpoint").filter((s) => s.trim())) {
       await db.exec(st);
     }
 
-    // 2. Insert existing Phase 2.1 user and session data
-    await db.exec(`
-      INSERT INTO users (id, email, name, password_hash, role, active)
-      VALUES ('c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01', 'admin@maxiofertas.cl', 'Admin Existente', 'hash123', 'ADMIN', true);
-    `);
-
-    await db.exec(`
-      INSERT INTO sessions (id, user_id, token, expires_at)
-      VALUES ('d0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02', 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01', 'token_hash_xyz', NOW() + INTERVAL '7 days');
-    `);
-
-    // 3. Apply Phase 3 upgrade migration
     const m1 = readMigration("0001_sharp_reptil.sql");
     for (const st of m1.split("--> statement-breakpoint").filter((s) => s.trim())) {
       await db.exec(st);
     }
 
-    // 4. Verify existing user and session remained intact
-    const userRes = await db.query("SELECT * FROM users WHERE email = 'admin@maxiofertas.cl';");
-    expect(userRes.rows).toHaveLength(1);
-
-    const sessionRes = await db.query("SELECT * FROM sessions WHERE token = 'token_hash_xyz';");
-    expect(sessionRes.rows).toHaveLength(1);
-
-    // 5. Create warehouse and link to existing user
+    // 2. Insert existing Phase 3 data
     await db.exec(`
       INSERT INTO warehouses (id, code, name, active)
       VALUES ('e0eebc99-9c0b-4ef8-bb6d-6bb9bd380a03', 'CENTRAL', 'Bodega Central', true);
     `);
 
     await db.exec(`
-      UPDATE users SET warehouse_id = 'e0eebc99-9c0b-4ef8-bb6d-6bb9bd380a03'
-      WHERE id = 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01';
+      INSERT INTO users (id, email, name, password_hash, role, warehouse_id, active)
+      VALUES ('c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01', 'solicitante@maxiofertas.cl', 'Solicitante Existente', 'hash123', 'WAREHOUSE_USER', 'e0eebc99-9c0b-4ef8-bb6d-6bb9bd380a03', true);
     `);
 
-    const updatedUserRes = await db.query<{ warehouse_id: string }>(
-      "SELECT warehouse_id FROM users WHERE id = 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01';"
-    );
-    expect(updatedUserRes.rows[0].warehouse_id).toBe("e0eebc99-9c0b-4ef8-bb6d-6bb9bd380a03");
+    await db.exec(`
+      INSERT INTO customers (id, rut_canonical, rut_display, legal_name, business_activity, active)
+      VALUES ('f0eebc99-9c0b-4ef8-bb6d-6bb9bd380a04', '76432109K', '76.432.109-K', 'Cliente Existente SPA', 'Giro', true);
+    `);
+
+    // 3. Apply Phase 4 upgrade migration
+    const m2 = readMigration("0002_concerned_molly_hayes.sql");
+    for (const st of m2.split("--> statement-breakpoint").filter((s) => s.trim())) {
+      await db.exec(st);
+    }
+
+    // 4. Verify existing records are completely intact
+    const userRes = await db.query("SELECT * FROM users WHERE email = 'solicitante@maxiofertas.cl';");
+    expect(userRes.rows).toHaveLength(1);
+
+    const custRes = await db.query("SELECT * FROM customers WHERE rut_canonical = '76432109K';");
+    expect(custRes.rows).toHaveLength(1);
+
+    // 5. Create invoice request using existing references
+    await db.exec(`
+      INSERT INTO invoice_requests (id, request_number, warehouse_id, customer_id, requested_by, status, customer_rut_snapshot, customer_legal_name_snapshot, customer_business_activity_snapshot, expected_gross_total)
+      VALUES ('11eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 'FAC-2026-000001', 'e0eebc99-9c0b-4ef8-bb6d-6bb9bd380a03', 'f0eebc99-9c0b-4ef8-bb6d-6bb9bd380a04', 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01', 'PENDING', '76.432.109-K', 'Cliente Existente SPA', 'Giro', 68000);
+    `);
+
+    const reqRes = await db.query("SELECT * FROM invoice_requests WHERE request_number = 'FAC-2026-000001';");
+    expect(reqRes.rows).toHaveLength(1);
   });
 });

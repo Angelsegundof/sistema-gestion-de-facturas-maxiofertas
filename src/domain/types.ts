@@ -32,6 +32,18 @@ export type Permission =
   | "CUSTOMER_CREATE"
   | "CUSTOMER_MANAGE";
 
+export type InvoiceRequestStatus =
+  | "PENDING"
+  | "IN_PROGRESS"
+  | "NEEDS_CORRECTION"
+  | "COMPLETED"
+  | "CANCELLED"
+  | "DUPLICATE";
+
+export type ReconciliationStatus = "MATCH" | "ROUNDING_ACCEPTED" | "MISMATCH";
+
+export type InvoiceRequestSource = "NATIVE" | "GOOGLE_SHEETS_LEGACY";
+
 export interface SanitizedWarehouse {
   id: string;
   code: string;
@@ -64,4 +76,63 @@ export interface SanitizedUser {
   active: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface SanitizedInvoiceRequestItem {
+  id: string;
+  invoiceRequestId: string;
+  lineNumber: number;
+  description: string;
+  quantity: number;
+  unitPriceGross: number;
+  unitPriceNet: number;
+  lineTotalGross: number;
+  lineTotalNet: number;
+  vatRate: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SanitizedInvoiceRequest {
+  id: string;
+  requestNumber: string;
+  warehouseId: string;
+  warehouse?: SanitizedWarehouse | null;
+  customerId: string;
+  customer?: SanitizedCustomer | null;
+  requestedBy: string;
+  requesterName?: string;
+  assignedTo: string | null;
+  assignedName?: string | null;
+  status: InvoiceRequestStatus;
+  customerRutSnapshot: string;
+  customerLegalNameSnapshot: string;
+  customerBusinessActivitySnapshot: string;
+  customerPhoneSnapshot: string | null;
+  customerEmailSnapshot: string | null;
+  expectedGrossTotal: number;
+  siiGrossTotal: number | null;
+  grossDifference: number | null;
+  reconciliationStatus: ReconciliationStatus | null;
+  notes: string | null;
+  duplicateWarning: boolean;
+  duplicateOverride: boolean;
+  duplicateOf: string | null;
+  source: InvoiceRequestSource;
+  idempotencyKey?: string | null;
+  createdAt: string;
+  assignedAt: string | null;
+  completedAt: string | null;
+  updatedAt: string;
+  items?: SanitizedInvoiceRequestItem[];
+}
+
+export interface DuplicateCandidate {
+  id: string;
+  requestNumber: string;
+  createdAt: string;
+  grossTotal: number;
+  status: InvoiceRequestStatus;
+  customerLegalName: string;
+  customerRut: string;
 }

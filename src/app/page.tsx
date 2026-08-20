@@ -81,6 +81,25 @@ export default async function HomePage() {
           </div>
         </header>
 
+        {/* M?dulo de Acci?n Principal para Solicitante / Bodega */}
+        {(user.role === "WAREHOUSE_USER" || user.role === "ADMIN") && (
+          <section className="p-6 bg-gradient-to-r from-slate-900 to-blue-950 text-white rounded-2xl shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+              <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">M?dulo Solicitante</span>
+              <h2 className="text-xl font-bold mt-1">Crear Solicitud de Factura</h2>
+              <p className="text-xs text-slate-300 mt-1 max-w-md">
+                Ingresa los datos del cliente y productos con precios IVA incluido para enviar a facturaci?n.
+              </p>
+            </div>
+            <Link
+              href="/solicitar"
+              className="inline-flex items-center justify-center py-3 px-6 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm rounded-xl shadow-md transition"
+            >
+              + Solicitar factura
+            </Link>
+          </section>
+        )}
+
         <section className="p-6 bg-white rounded-2xl border border-slate-200 shadow-sm space-y-4">
           <h2 className="text-base font-bold text-slate-800">
             Perfil de Usuario Autenticado
@@ -104,18 +123,6 @@ export default async function HomePage() {
                 {user.active ? "Activo" : "Inactivo"}
               </span>
             </div>
-          </div>
-        </section>
-
-        <section className="p-6 bg-white rounded-2xl border border-slate-200 shadow-sm">
-          <h2 className="text-base font-bold text-slate-800 mb-2">
-            M?dulos Operacionales (Fase 2)
-          </h2>
-          <p className="text-xs text-slate-600 mb-4">
-            Autenticaci?n y autorizaci?n completadas. Los m?dulos de gesti?n de solicitudes, facturas y bodegas se activar?n en las fases 3 a 13.
-          </p>
-          <div className="p-4 bg-blue-50/50 rounded-xl border border-blue-100 text-xs text-blue-900 font-mono">
-            Control de Acceso: Matriz de Roles v1.0 activa ? Default Deny en vigor.
           </div>
         </section>
       </div>

@@ -9,7 +9,16 @@ export type AuditAction =
   | "USER_CREATED"
   | "USER_ROLE_CHANGED"
   | "USER_DISABLED"
-  | "USER_ENABLED";
+  | "USER_ENABLED"
+  | "WAREHOUSE_CREATED"
+  | "WAREHOUSE_UPDATED"
+  | "WAREHOUSE_DISABLED"
+  | "WAREHOUSE_ENABLED"
+  | "CUSTOMER_CREATED"
+  | "CUSTOMER_UPDATED"
+  | "REQUEST_CREATED"
+  | "DUPLICATE_WARNING_SHOWN"
+  | "DUPLICATE_OVERRIDE";
 
 export interface LogAuditParams {
   userId?: string | null;
