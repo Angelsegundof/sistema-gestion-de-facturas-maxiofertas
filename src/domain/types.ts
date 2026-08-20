@@ -306,3 +306,61 @@ export interface QueueSummaryCounters {
   changesRequestedCount: number;
   completedTodayCount: number;
 }
+
+export interface StatisticsPeriod {
+  month: number;
+  year: number;
+  label: string;
+  startDate: string;
+  endDate: string;
+}
+
+export interface OperationalStatistics {
+  totalRequests: number;
+  pending: number;
+  inProgress: number;
+  needsCorrection: number;
+  completed: number;
+  cancelled: number;
+  changesRequested: number;
+  changesCompleted: number;
+  averageResolutionMinutes: number;
+}
+
+export interface StatisticsSummary {
+  period: StatisticsPeriod;
+  grossIssued: number;
+  creditNotesTotal: number;
+  creditNotesCount: number;
+  grossTotal: number; // Facturación vigente
+  netEstimated: number;
+  vatEstimated: number;
+  invoiceCount: number; // Cantidad de facturas vigentes
+  averageTicket: number;
+  operational: OperationalStatistics;
+}
+
+export interface WarehouseStatistics {
+  warehouseId: string;
+  warehouseName: string;
+  warehouseCode: string;
+  grossTotal: number;
+  netEstimated: number;
+  vatEstimated: number;
+  invoiceCount: number;
+  averageTicket: number;
+  percentage: number;
+}
+
+export interface MonthlyEvolutionItem {
+  period: string; // YYYY-MM
+  label: string; // E.g. Ago 2026
+  year: number;
+  month: number;
+  grossTotal: number;
+  netEstimated: number;
+  vatEstimated: number;
+  creditNotesTotal: number;
+  invoiceCount: number;
+}
+
