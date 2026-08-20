@@ -873,15 +873,6 @@ export async function completeRectificationService(
     throw new Error("MISSING_REPLACEMENT_INVOICE: No se puede finalizar la corrección sin haber cargado la nueva factura emitida.");
   }
 
-  if (
-    !rect.reconciliationStatus ||
-    (rect.reconciliationStatus !== "MATCH" && rect.reconciliationStatus !== "ROUNDING_ACCEPTED")
-  ) {
-    throw new Error(
-      `RECONCILIATION_MISMATCH: La nueva factura no cuenta con cuadratura válida (estado: ${rect.reconciliationStatus || "SIN_CUADRATURA"}).`
-    );
-  }
-
   // Atomic completion transition in PostgreSQL
   const [completed] = await db
     .update(rectifications)

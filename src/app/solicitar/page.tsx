@@ -62,25 +62,11 @@ export default function SolicitarFacturaPage() {
     loadUser();
   }, [router]);
 
-  // RUT Blur Lookup
-  const handleRutBlur = async () => {
-    const trimmed = rut.trim();
-    if (!trimmed) {
-      setRutError(null);
-      setCustomerLookupStatus("idle");
-      return;
-    }
-
-    if (!validateRut(trimmed)) {
-      setRutError("Revisa el RUT. Parece estar incompleto o ser inválido.");
-      setCustomerLookupStatus("idle");
-      return;
-    }
-
-    setRutError(null);
-    setRut(formatRut(trimmed));
+  // RUT Change and Lookup
+  const lookupCustomer = async (rawInput: string) => {
+    const trimmed = rawInput.trim();
+    if (!trimmed || !validateRut(trimmed)) return;
     setCustomerLookupStatus("loading");
-
     try {
       const canonical = normalizeRut(trimmed);
       const res = await fetch(`/api/v1/customers/by-rut/${encodeURIComponent(canonical)}`);
@@ -99,6 +85,35 @@ export default function SolicitarFacturaPage() {
     } catch {
       setCustomerLookupStatus("new");
     }
+  };
+
+  const handleRutChange = (val: string) => {
+    const cleaned = val.replace(/[^0-9kK.-]/g, "");
+    setRut(cleaned);
+    if (rutError) setRutError(null);
+
+    if (validateRut(cleaned)) {
+      lookupCustomer(cleaned);
+    }
+  };
+
+  const handleRutBlur = () => {
+    const trimmed = rut.trim();
+    if (!trimmed) {
+      setRutError(null);
+      setCustomerLookupStatus("idle");
+      return;
+    }
+
+    if (!validateRut(trimmed)) {
+      setRutError("Revisa el RUT. Parece estar incompleto o ser inválido.");
+      setCustomerLookupStatus("idle");
+      return;
+    }
+
+    setRutError(null);
+    setRut(formatRut(trimmed));
+    lookupCustomer(trimmed);
   };
 
   // Product Line Operations
@@ -310,7 +325,7 @@ export default function SolicitarFacturaPage() {
               <div className="flex-1">
                 <h3 className="text-base font-bold text-amber-900">Esta solicitud se parece a otra reciente</h3>
                 <p className="text-xs text-amber-800 mt-1">
-                  Encontramos una solicitud previa con el mismo RUT, total y bodega en las ?ltimas 24 horas:
+                  Encontramos una solicitud previa con el mismo RUT, total y bodega en las últimas 24 horas:
                 </p>
 
                 <div className="bg-white rounded-lg p-3 border border-amber-200 mt-2 space-y-1 text-xs">
@@ -373,10 +388,7 @@ export default function SolicitarFacturaPage() {
                   id="rut"
                   type="text"
                   value={rut}
-                  onChange={(e) => {
-                    setRut(e.target.value);
-                    if (rutError) setRutError(null);
-                  }}
+                  onChange={(e) => handleRutChange(e.target.value)}
                   onBlur={handleRutBlur}
                   placeholder="Ej: 76.123.456-7"
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
@@ -390,13 +402,13 @@ export default function SolicitarFacturaPage() {
 
                 {customerLookupStatus === "found" && (
                   <div className="bg-emerald-50 border border-emerald-200 rounded-md p-2.5 mt-2 flex items-center justify-between text-xs text-emerald-800">
-                    <span>? Encontramos este cliente. Datos autocompletados.</span>
+                    <span>✓ Encontramos este cliente. Datos autocompletados.</span>
                   </div>
                 )}
 
                 {customerLookupStatus === "new" && (
                   <p className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-md p-2 mt-2">
-                    ? Cliente nuevo. Completa sus datos para continuar.
+                    ℹ Cliente nuevo. Completa sus datos para continuar.
                   </p>
                 )}
               </div>

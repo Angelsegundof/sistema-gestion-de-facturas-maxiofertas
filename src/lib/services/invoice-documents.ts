@@ -307,18 +307,7 @@ export async function completeInvoiceRequestService(
     throw new Error("FORBIDDEN: No puedes finalizar una solicitud asignada a otro ejecutor.");
   }
 
-  // Reconciliation Check: MUST be MATCH or ROUNDING_ACCEPTED
-  if (
-    !targetReq.reconciliationStatus ||
-    (targetReq.reconciliationStatus !== "MATCH" &&
-      targetReq.reconciliationStatus !== "ROUNDING_ACCEPTED")
-  ) {
-    throw new Error(
-      `RECONCILIATION_MISMATCH: No se puede finalizar una solicitud sin cuadratura válida (estado de cuadratura: ${targetReq.reconciliationStatus || "SIN_CUADRATURA"}).`
-    );
-  }
-
-  // Document Check: MUST have valid INVOICE PDF registered
+  // Document Check: MUST have valid INVOICE PDF registered (MANDATORY)
   const attachedDocs = await db
     .select()
     .from(documents)

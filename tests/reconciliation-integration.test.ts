@@ -61,7 +61,7 @@ describe("SII Calculations and Reconciliation Integration Tests (Real PostgreSQL
         },
         {
           email: "ejecutor.a@maxiofertas.cl",
-          name: "Mar?a Ejecutora A",
+          name: "María Ejecutora A",
           passwordHash: "hash123",
           role: "INVOICE_EXECUTOR",
           active: true,
@@ -177,7 +177,7 @@ describe("SII Calculations and Reconciliation Integration Tests (Real PostgreSQL
     expect(updated.reconciliationStatus).toBe("MATCH");
   });
 
-  it("2. ROUNDING_ACCEPTED: Reconciling with ?1 or ?2 CLP difference results in ROUNDING_ACCEPTED", async () => {
+  it("2. ROUNDING_ACCEPTED: Reconciling with ±1 or ±2 CLP difference results in ROUNDING_ACCEPTED", async () => {
     const [req] = await db
       .insert(schema.invoiceRequests)
       .values({

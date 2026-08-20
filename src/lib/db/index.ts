@@ -44,6 +44,7 @@ function initLocalPglite(): PgliteDatabase<typeof schema> {
 }
 
 export async function runLocalMigrations(pgInstance: PGlite): Promise<void> {
+  await pgInstance.waitReady;
   const migrationsDir = path.resolve(process.cwd(), "src/lib/db/migrations");
   const migrationFiles = [
     "0000_cheerful_giant_girl.sql",

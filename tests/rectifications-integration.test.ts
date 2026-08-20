@@ -598,9 +598,9 @@ describe("Fase 8: Rectificaciones y Notas de Crédito (Integration)", () => {
       db
     );
 
-    await expect(
-      completeRectificationService(executorUser, rect.id, "127.0.0.1", db)
-    ).rejects.toThrow("RECONCILIATION_MISMATCH");
+    // Under DF-QA-001, MISMATCH does not block rectification completion if NC and PDF are valid
+    const completed = await completeRectificationService(executorUser, rect.id, "127.0.0.1", db);
+    expect(completed.status).toBe("COMPLETED");
   });
 
   it("Scenario 10: Invoice Timeline returns complete non-technical chronology", async () => {

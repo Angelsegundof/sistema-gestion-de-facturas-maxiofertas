@@ -26,6 +26,26 @@ describe("Chilean RUT Validation and Normalization", () => {
     expect(normalizeRut("12345678-5")).toBe("123456785");
   });
 
+  it("should normalize interchangeable RUT formats (unformatted, with hyphen, with dots) to same canonical and display", () => {
+    const rawPlain = "761234560";
+    const rawDotsHyphen = "76.123.456-0";
+    const rawHyphenOnly = "76123456-0";
+
+    expect(validateRut(rawPlain)).toBe(true);
+    expect(validateRut(rawDotsHyphen)).toBe(true);
+    expect(validateRut(rawHyphenOnly)).toBe(true);
+
+    const canonical = "761234560";
+    expect(normalizeRut(rawPlain)).toBe(canonical);
+    expect(normalizeRut(rawDotsHyphen)).toBe(canonical);
+    expect(normalizeRut(rawHyphenOnly)).toBe(canonical);
+
+    const display = "76.123.456-0";
+    expect(formatRut(rawPlain)).toBe(display);
+    expect(formatRut(rawDotsHyphen)).toBe(display);
+    expect(formatRut(rawHyphenOnly)).toBe(display);
+  });
+
   it("should format canonical RUTs to standard display format with dots and hyphen", () => {
     expect(formatRut("76432109K")).toBe("76.432.109-K");
     expect(formatRut("55555559")).toBe("5.555.555-9");

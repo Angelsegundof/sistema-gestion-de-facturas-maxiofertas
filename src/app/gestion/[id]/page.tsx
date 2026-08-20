@@ -308,7 +308,7 @@ ${itemsText}`;
   const isReconciliationValid =
     activeReconciliation &&
     (activeReconciliation.status === "MATCH" || activeReconciliation.status === "ROUNDING_ACCEPTED");
-  const canFinalize = isReconciliationValid && uploadedDocument && !isCompleted;
+  const canFinalize = Boolean(uploadedDocument && !isCompleted);
 
   return (
     <div className="min-h-screen bg-slate-50 py-6 px-4 sm:px-6 lg:px-8">
@@ -348,123 +348,110 @@ ${itemsText}`;
             <div className="text-xs text-emerald-900 grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <span className="text-emerald-700 block font-medium">Solicitud:</span>
-                <span className="font-mono font-bold text-sm">{requestData.requestNumber}</span>
+                <span className="font-mono font-bold text-slate-900">{requestData.requestNumber}</span>
               </div>
               <div>
                 <span className="text-emerald-700 block font-medium">Cliente:</span>
-                <span className="font-bold">{requestData.customerLegalNameSnapshot}</span>
+                <span className="font-bold text-slate-900">{requestData.customerLegalNameSnapshot}</span>
               </div>
               <div>
-                <span className="text-emerald-700 block font-medium">Total facturado:</span>
-                <span className="font-extrabold text-sm">{formatCLP(requestData.expectedGrossTotal)}</span>
+                <span className="text-emerald-700 block font-medium">Total Facturado:</span>
+                <span className="font-mono font-bold text-emerald-900 text-sm">{formatCLP(requestData.expectedGrossTotal)}</span>
               </div>
             </div>
-            <div className="pt-2 flex flex-wrap gap-3">
-              {uploadedDocument?.accessUrl && (
-                <a
-                  href={uploadedDocument.accessUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="py-2 px-4 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl shadow-sm transition flex items-center gap-1.5"
-                >
-                  <span>📄</span>
-                  <span>Ver factura emitida (PDF)</span>
-                </a>
-              )}
+            <div className="pt-2 flex items-center justify-between border-t border-emerald-200">
+              <span className="text-[11px] text-emerald-800">
+                Estado: COMPLETED | Documento de factura resguardado en almacenamiento inmutable.
+              </span>
               <Link
                 href="/gestion"
-                className="py-2 px-4 bg-white hover:bg-emerald-100 text-emerald-900 border border-emerald-300 text-xs font-bold rounded-xl transition"
+                className="py-1.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition shadow-xs"
               >
-                Volver a la cola
+                Volver a la cola de trabajo →
               </Link>
             </div>
           </div>
         )}
 
-        {/* Main Worktable Card */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-8 space-y-8">
-          {/* Header Solicitud */}
-          <div className="border-b border-slate-200 pb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Mesa de Trabajo — Ejecutor</p>
-              <h1 className="text-3xl font-extrabold text-slate-900 font-mono mt-1">{requestData.requestNumber}</h1>
-              <p className="text-xs text-slate-500 mt-1">
-                Bodega {requestData.warehouse?.name || "Central"} • Solicitada por {requestData.requesterName}
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
+        {/* Main Work Area */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-6">
+          {/* Bloque 1: Datos del Cliente */}
+          <div>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+              <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
+                1. Datos del cliente para factura
+              </h2>
               <button
                 type="button"
                 onClick={copyAllMainData}
-                className="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-lg border border-slate-300 transition flex items-center gap-1.5"
+                className="self-start sm:self-auto py-1 px-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-md text-xs font-semibold transition flex items-center gap-1.5"
               >
                 <span>📋</span>
                 <span>{copiedField === "Datos principales" ? "✓ Datos copiados" : "Copiar datos principales"}</span>
               </button>
-
-              <a
-                href="https://www.sii.cl"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="py-2 px-4 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg shadow-sm transition flex items-center gap-1.5"
-              >
-                <span>↗</span>
-                <span>Abrir SII</span>
-              </a>
             </div>
-          </div>
 
-          {/* Bloque 1: Datos del Cliente para Facturar */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
-                1. Datos del cliente para emitir en SII
-              </h2>
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                <span className="text-xs font-bold text-slate-700">
+                  Solicitud: <span className="font-mono text-blue-700">{requestData.requestNumber}</span>
+                </span>
+                <span className="text-xs text-slate-500">
+                  Bodega: <strong className="text-slate-800">{requestData.warehouseId ? "Santiago Central" : "Norte"}</strong>
+                </span>
+              </div>
+
               {copiedField && copiedField !== "Datos principales" && (
-                <span className="text-xs font-bold text-emerald-600 animate-pulse">✓ {copiedField} copiado</span>
+                <div className="py-1 px-2 bg-emerald-100 border border-emerald-300 rounded text-xs font-bold text-emerald-800 animate-pulse">
+                  ✓ {copiedField.startsWith("Producto") ? "Producto copiado" : copiedField.startsWith("Cantidad") ? "Cantidad copiada" : copiedField.startsWith("Precio") ? "Precio neto copiado" : `${copiedField} copiado`}
+                </div>
               )}
-            </div>
 
-            <div className="bg-slate-50 rounded-xl p-5 border border-slate-200 grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-white p-3.5 rounded-lg border border-slate-200 relative group">
-                <span className="text-xs font-semibold text-slate-500 block mb-1">RUT del cliente</span>
-                <span className="font-mono font-bold text-slate-900 text-base">{requestData.customerRutSnapshot}</span>
-                <button
-                  type="button"
-                  onClick={() => copyToClipboard(requestData.customerRutSnapshot, "RUT")}
-                  className="mt-2 w-full py-1 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 text-xs font-semibold rounded transition"
-                >
-                  {copiedField === "RUT" ? "✓ Copiado" : "Copiar RUT"}
-                </button>
-              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* RUT */}
+                <div className="bg-white p-3 rounded-lg border border-slate-200 flex flex-col justify-between">
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">RUT</span>
+                    <span className="font-mono font-bold text-slate-900 text-sm">{requestData.customerRutSnapshot}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(requestData.customerRutSnapshot, "RUT")}
+                    className="mt-2 py-1 px-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-xs font-semibold transition w-full text-center"
+                  >
+                    {copiedField === "RUT" ? "✓ Copiado" : "Copiar RUT"}
+                  </button>
+                </div>
 
-              <div className="bg-white p-3.5 rounded-lg border border-slate-200 relative group">
-                <span className="text-xs font-semibold text-slate-500 block mb-1">Razón social</span>
-                <span className="font-bold text-slate-900 text-sm block truncate" title={requestData.customerLegalNameSnapshot}>
-                  {requestData.customerLegalNameSnapshot}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => copyToClipboard(requestData.customerLegalNameSnapshot, "Razón Social")}
-                  className="mt-2 w-full py-1 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 text-xs font-semibold rounded transition"
-                >
-                  {copiedField === "Razón Social" ? "✓ Copiado" : "Copiar Razón Social"}
-                </button>
-              </div>
+                {/* Razón Social */}
+                <div className="bg-white p-3 rounded-lg border border-slate-200 flex flex-col justify-between">
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Razón Social</span>
+                    <span className="font-semibold text-slate-900 text-xs line-clamp-2">{requestData.customerLegalNameSnapshot}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(requestData.customerLegalNameSnapshot, "Razón Social")}
+                    className="mt-2 py-1 px-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-xs font-semibold transition w-full text-center"
+                  >
+                    {copiedField === "Razón Social" ? "✓ Copiado" : "Copiar Razón Social"}
+                  </button>
+                </div>
 
-              <div className="bg-white p-3.5 rounded-lg border border-slate-200 relative group">
-                <span className="text-xs font-semibold text-slate-500 block mb-1">Giro comercial</span>
-                <span className="font-bold text-slate-900 text-sm block truncate" title={requestData.customerBusinessActivitySnapshot}>
-                  {requestData.customerBusinessActivitySnapshot}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => copyToClipboard(requestData.customerBusinessActivitySnapshot, "Giro")}
-                  className="mt-2 w-full py-1 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 text-xs font-semibold rounded transition"
-                >
-                  {copiedField === "Giro" ? "✓ Copiado" : "Copiar Giro"}
-                </button>
+                {/* Giro */}
+                <div className="bg-white p-3 rounded-lg border border-slate-200 flex flex-col justify-between">
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Giro</span>
+                    <span className="font-semibold text-slate-900 text-xs line-clamp-2">{requestData.customerBusinessActivitySnapshot}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(requestData.customerBusinessActivitySnapshot, "Giro")}
+                    className="mt-2 py-1 px-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-xs font-semibold transition w-full text-center"
+                  >
+                    {copiedField === "Giro" ? "✓ Copiado" : "Copiar Giro"}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -475,7 +462,7 @@ ${itemsText}`;
               <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
                 2. Productos para ingresar en el SII
               </h2>
-              <span className="text-xs text-slate-500">Copia el Precio Neto calculado para ingresar en SII</span>
+              <span className="text-xs text-slate-500">Copia cada dato individual para el formulario del SII</span>
             </div>
 
             <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
@@ -496,8 +483,32 @@ ${itemsText}`;
                   {requestData.items?.map((item) => (
                     <tr key={item.id} className="hover:bg-slate-50">
                       <td className="py-3 px-4 text-slate-400 font-mono">{item.lineNumber}</td>
-                      <td className="py-3 px-4 font-semibold text-slate-900">{item.description}</td>
-                      <td className="py-3 px-4 text-center font-bold text-slate-800">{item.quantity}</td>
+                      <td className="py-3 px-4 font-semibold text-slate-900">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="line-clamp-2">{item.description}</span>
+                          <button
+                            type="button"
+                            onClick={() => copyToClipboard(item.description, `Producto`)}
+                            className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-medium text-xs transition border border-slate-300 shrink-0"
+                            title="Copiar descripción del producto"
+                          >
+                            Copiar
+                          </button>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-center font-bold text-slate-800">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <span>{item.quantity}</span>
+                          <button
+                            type="button"
+                            onClick={() => copyToClipboard(item.quantity.toString(), `Cantidad`)}
+                            className="px-1.5 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-medium text-[11px] transition border border-slate-300"
+                            title="Copiar cantidad"
+                          >
+                            Copiar
+                          </button>
+                        </div>
+                      </td>
                       <td className="py-3 px-4 text-right text-slate-600">{formatCLP(item.unitPriceGross)}</td>
                       <td className="py-3 px-4 text-right bg-blue-50/40">
                         <div className="flex items-center justify-end gap-2">
@@ -548,49 +559,50 @@ ${itemsText}`;
               )}
             </div>
 
-            {/* Ingreso y Validación de Total SII */}
+            {/* Cuadratura Opcional SII */}
             <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 flex flex-col justify-between space-y-4">
               <div>
-                <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-1">
-                  3. Cuadratura del total SII
-                </h3>
-                <p className="text-xs text-slate-500 mb-4">
-                  Ingresa el total final calculado por el portal del SII para verificar la cuadratura.
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    3. Cuadratura con Total SII (Opcional)
+                  </h3>
+                  <span className="text-[11px] bg-slate-200 text-slate-700 px-2 py-0.5 rounded font-semibold">
+                    Opcional
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  Opcionalmente introduce el total generado en el SII para verificar que los precios netos coinciden.
                 </p>
+              </div>
 
-                <div className="space-y-2">
-                  <label htmlFor="siiTotal" className="block text-xs font-bold text-slate-700">
-                    Total mostrado por SII *
-                  </label>
-                  <div className="flex gap-2">
-                    <div className="relative flex-1">
-                      <span className="absolute left-3.5 top-2.5 text-slate-400 text-base font-bold">$</span>
-                      <input
-                        id="siiTotal"
-                        type="number"
-                        min="1"
-                        disabled={isCompleted}
-                        value={siiInput}
-                        onChange={(e) => setSiiInput(e.target.value)}
-                        placeholder="Ej: 68000"
-                        className="w-full pl-8 pr-3 py-2 text-base font-mono font-bold bg-white border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100"
-                      />
-                    </div>
-                    {!isCompleted && (
-                      <button
-                        type="button"
-                        onClick={handleSaveReconciliation}
-                        disabled={reconciling || isNaN(parsedSiiTotal) || parsedSiiTotal <= 0}
-                        className="py-2 px-4 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-sm transition disabled:opacity-50"
-                      >
-                        {reconciling ? "Guardando..." : "Guardar cuadratura"}
-                      </button>
-                    )}
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <span className="absolute left-3 top-2 text-sm text-slate-400 font-bold">$</span>
+                    <input
+                      type="text"
+                      placeholder="Ej: 125000"
+                      value={siiInput}
+                      onChange={(e) => setSiiInput(e.target.value)}
+                      disabled={isCompleted}
+                      className="w-full pl-7 pr-3 py-2 border border-slate-300 rounded-xl text-sm font-mono font-bold text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                    />
                   </div>
-                  {reconciliationError && (
-                    <p className="text-xs text-rose-600 font-semibold">{reconciliationError}</p>
+                  {!isCompleted && (
+                    <button
+                      type="button"
+                      onClick={handleSaveReconciliation}
+                      disabled={reconciling || !siiInput}
+                      className="py-2 px-4 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-xl shadow-sm transition disabled:opacity-40"
+                    >
+                      {reconciling ? "Verificando..." : "Comprobar"}
+                    </button>
                   )}
                 </div>
+
+                {reconciliationError && (
+                  <p className="text-xs text-rose-600 font-semibold">{reconciliationError}</p>
+                )}
               </div>
 
               {/* Feedback de Cuadratura */}
@@ -602,44 +614,35 @@ ${itemsText}`;
                         <span>✓</span>
                         <span>Los valores coinciden exactamente. (MATCH)</span>
                       </div>
-                      <p className="text-xs text-emerald-800">
-                        Solicitud: {formatCLP(activeReconciliation.expectedGrossTotal)} | SII:{" "}
-                        {formatCLP(activeReconciliation.siiGrossTotal)} | Diferencia: $0
-                      </p>
-                    </div>
-                  )}
-
-                  {activeReconciliation.status === "ROUNDING_ACCEPTED" && (
-                    <div className="p-4 bg-amber-50 border-2 border-amber-300 rounded-xl text-amber-900 space-y-1">
-                      <div className="flex items-center gap-2 font-bold text-xs">
-                        <span>✓</span>
-                        <span>Diferencia de redondeo aceptada. (ROUNDING_ACCEPTED)</span>
-                      </div>
-                      <p className="text-xs text-amber-800">
-                        Solicitud: {formatCLP(activeReconciliation.expectedGrossTotal)} | SII:{" "}
-                        {formatCLP(activeReconciliation.siiGrossTotal)} | Diferencia:{" "}
-                        {activeReconciliation.grossDifference > 0
-                          ? `+${formatCLP(activeReconciliation.grossDifference)}`
-                          : formatCLP(activeReconciliation.grossDifference)}
-                      </p>
                     </div>
                   )}
 
                   {activeReconciliation.status === "MISMATCH" && (
-                    <div className="p-4 bg-rose-50 border-2 border-rose-300 rounded-xl text-rose-900 space-y-1.5">
-                      <div className="flex items-center gap-2 font-bold text-xs text-rose-800">
+                    <div className="p-4 bg-amber-50 border-2 border-amber-300 rounded-xl text-amber-950 space-y-2">
+                      <div className="flex items-center gap-2 font-bold text-xs text-amber-900">
                         <span>⚠</span>
-                        <span>Los valores no coinciden (MISMATCH)</span>
+                        <span>El total ingresado no coincide</span>
                       </div>
-                      <p className="text-xs text-rose-800">
-                        Solicitud: {formatCLP(activeReconciliation.expectedGrossTotal)} | SII:{" "}
-                        {formatCLP(activeReconciliation.siiGrossTotal)} | Diferencia:{" "}
-                        {activeReconciliation.grossDifference > 0
-                          ? `+${formatCLP(activeReconciliation.grossDifference)}`
-                          : formatCLP(activeReconciliation.grossDifference)}
-                      </p>
-                      <p className="text-xs font-semibold text-rose-700 bg-white/70 p-2 rounded border border-rose-200">
-                        Revisa los precios netos ingresados en el SII antes de continuar. La finalización normal está bloqueada mientras exista discrepancia superior a ±$2.
+                      <div className="text-xs text-amber-900 grid grid-cols-3 gap-2 py-1 font-mono">
+                        <div>
+                          <span className="text-slate-500 font-sans block text-[10px] uppercase font-bold">Sistema:</span>
+                          <span className="font-bold">{formatCLP(activeReconciliation.expectedGrossTotal)}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 font-sans block text-[10px] uppercase font-bold">SII:</span>
+                          <span className="font-bold">{formatCLP(activeReconciliation.siiGrossTotal)}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 font-sans block text-[10px] uppercase font-bold">Diferencia:</span>
+                          <span className="font-bold text-amber-800">
+                            {activeReconciliation.grossDifference > 0
+                              ? `+${formatCLP(activeReconciliation.grossDifference)}`
+                              : formatCLP(activeReconciliation.grossDifference)}
+                          </span>
+                        </div>
+                      </div>
+                      <p className="text-xs text-amber-800 bg-white/80 p-2 rounded border border-amber-200">
+                        Revisa los datos ingresados en el SII antes de continuar.
                       </p>
                     </div>
                   )}
@@ -648,7 +651,7 @@ ${itemsText}`;
             </div>
           </div>
 
-          {/* Bloque 4: Carga y Gestión de Documento PDF de Factura */}
+          {/* Bloque 4: Carga de Documento PDF */}
           <div>
             <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-3">
               4. Factura emitida en SII (PDF)
@@ -658,32 +661,26 @@ ${itemsText}`;
             {uploadedDocument ? (
               <div className="p-5 bg-emerald-50/60 border-2 border-emerald-300 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-lg shadow-sm">
-                    PDF
+                  <div className="h-10 w-10 bg-emerald-600 text-white rounded-xl flex items-center justify-center font-bold text-lg shadow-sm">
+                    📄
                   </div>
                   <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-slate-900 text-sm">{uploadedDocument.fileName}</span>
-                      <span className="text-xs font-semibold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-200">
-                        ✓ Cargado
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Tamaño: {(uploadedDocument.fileSize / 1024).toFixed(1)} KB • Almacenamiento seguro en R2
-                    </p>
+                    <span className="text-xs font-bold text-emerald-950 block">{uploadedDocument.fileName}</span>
+                    <span className="text-[11px] text-emerald-700">
+                      {(uploadedDocument.fileSize / 1024).toFixed(1)} KB | Cargado exitosamente
+                    </span>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                <div className="flex items-center gap-2">
                   {uploadedDocument.accessUrl && (
                     <a
                       href={uploadedDocument.accessUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="py-2 px-3 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 text-xs font-bold rounded-xl transition shadow-sm flex items-center gap-1.5"
+                      className="py-1.5 px-3 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-lg text-xs font-semibold transition"
                     >
-                      <span>📄</span>
-                      <span>Ver factura</span>
+                      Ver PDF ↗
                     </a>
                   )}
 

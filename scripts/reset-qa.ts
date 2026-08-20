@@ -3,7 +3,7 @@ import * as dotenv from "dotenv";
 dotenv.config({ path: ".env.local" });
 
 import { eq, inArray, like, or } from "drizzle-orm";
-import { getDb } from "../src/lib/db";
+import { getDb, runLocalMigrations } from "../src/lib/db";
 import {
   invoiceRequests,
   invoiceRequestItems,
@@ -24,6 +24,10 @@ async function resetQa() {
   if (!db) {
     console.error("[ERROR] DATABASE_URL no está configurada.");
     process.exit(1);
+  }
+
+  if ((global as any).__localPgliteInstance) {
+    await runLocalMigrations((global as any).__localPgliteInstance);
   }
 
   console.log("===============================================================");

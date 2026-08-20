@@ -382,7 +382,7 @@ describe("Fase 7: R2, Documentos y Finalización de Factura (Integration)", () =
       expect(completed.status).toBe("COMPLETED");
     });
 
-    it("Rechaza finalizar si la cuadratura es MISMATCH", async () => {
+    it("Permite finalizar factura con MISMATCH y PDF cargado (DF-QA-001 Cuadratura Opcional)", async () => {
       await pg.exec(`
         INSERT INTO invoice_requests (
           id, request_number, warehouse_id, customer_id, requested_by, assigned_to,
@@ -411,14 +411,66 @@ describe("Fase 7: R2, Documentos y Finalización de Factura (Integration)", () =
         db
       );
 
-      await expect(
-        completeInvoiceRequestService(
-          executorUser,
-          "66666666-6666-6666-6666-666666666666",
-          undefined,
-          db
-        )
-      ).rejects.toThrow("RECONCILIATION_MISMATCH");
+      const completed = await completeInvoiceRequestService(
+        executorUser,
+        "66666666-6666-6666-6666-666666666666",
+        undefined,
+        db
+      );
+
+      expect(completed.status).toBe("COMPLETED");
+
+      // Verify that MISMATCH status is preserved in DB for auditing
+      const res = await pg.query<{ status: string; reconciliation_status: string }>(
+        "SELECT status, reconciliation_status FROM invoice_requests WHERE id = '66666666-6666-6666-6666-666666666666';"
+      );
+      expect(res.rows[0].status).toBe("COMPLETED");
+      expect(res.rows[0].reconciliation_status).toBe("MISMATCH");
+    });
+
+    it("Permite finalizar factura sin haber realizado cuadratura previa si cuenta con PDF válido (DF-QA-001)", async () => {
+      await pg.exec(`
+        INSERT INTO invoice_requests (
+          id, request_number, warehouse_id, customer_id, requested_by, assigned_to,
+          status, customer_rut_snapshot, customer_legal_name_snapshot,
+          customer_business_activity_snapshot, expected_gross_total, sii_gross_total,
+          gross_difference, reconciliation_status
+        ) VALUES (
+          '88888888-8888-8888-8888-888888888888', 'FAC-2026-000008', 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01',
+          'd0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01', 'b1eebc99-9c0b-4ef8-bb6d-6bb9bd380a01',
+          'a1eebc99-9c0b-4ef8-bb6d-6bb9bd380a01', 'IN_PROGRESS', '76.432.109-K',
+          'Comercializadora Ejemplo SPA', 'Venta al por mayor', 68000, NULL, NULL, NULL
+        );
+      `);
+
+      const pdf = createValidPdfBuffer("Factura 008");
+      await uploadInvoiceDocumentService(
+        executorUser,
+        "88888888-8888-8888-8888-888888888888",
+        {
+          buffer: pdf,
+          fileName: "factura_008.pdf",
+          mimeType: "application/pdf",
+          fileSize: pdf.length,
+        },
+        undefined,
+        db
+      );
+
+      const completed = await completeInvoiceRequestService(
+        executorUser,
+        "88888888-8888-8888-8888-888888888888",
+        undefined,
+        db
+      );
+
+      expect(completed.status).toBe("COMPLETED");
+
+      const res = await pg.query<{ status: string; reconciliation_status: string | null }>(
+        "SELECT status, reconciliation_status FROM invoice_requests WHERE id = '88888888-8888-8888-8888-888888888888';"
+      );
+      expect(res.rows[0].status).toBe("COMPLETED");
+      expect(res.rows[0].reconciliation_status).toBeNull();
     });
 
     it("Rechaza finalizar si no se ha cargado documento PDF", async () => {
