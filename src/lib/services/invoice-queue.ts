@@ -12,7 +12,11 @@ import {
   RequestCorrectionReason,
   InvoiceRequestStatus,
 } from "@/lib/db/schema";
-import { calculateRequestTotals } from "@/domain/pricing";
+import {
+  calculateRequestTotals,
+  calculateReconciliation,
+  ReconciliationResult,
+} from "@/domain/pricing";
 import { formatRut, normalizeRut, validateRut } from "@/lib/validation/rut";
 import { logAuditEvent } from "@/lib/auth/audit";
 import {
@@ -542,6 +546,101 @@ export async function reassignInvoiceRequestService(
   });
 
   return sanitizeQueueInvoiceRequest(updatedReq);
+}
+
+export interface ReconcileInvoiceRequestInput {
+  siiGrossTotal: number;
+}
+
+export async function reconcileInvoiceRequestService(
+  currentUser: SanitizedUser,
+  requestId: string,
+  input: ReconcileInvoiceRequestInput,
+  ipAddress?: string
+): Promise<{
+  request: SanitizedInvoiceRequest;
+  reconciliation: ReconciliationResult;
+}> {
+  const db = getDb();
+  if (!db) {
+    throw new Error("Base de datos no disponible.");
+  }
+
+  if (currentUser.role !== "INVOICE_EXECUTOR" && currentUser.role !== "ADMIN") {
+    throw new Error("FORBIDDEN: No tienes permisos para conciliar montos del SII.");
+  }
+
+  if (!Number.isInteger(input.siiGrossTotal) || input.siiGrossTotal <= 0) {
+    throw new Error("VALIDATION_ERROR: El monto del SII debe ser un entero positivo.");
+  }
+
+  const existingReqList: InvoiceRequest[] = await db
+    .select()
+    .from(invoiceRequests)
+    .where(eq(invoiceRequests.id, requestId))
+    .limit(1);
+
+  if (existingReqList.length === 0) {
+    throw new Error("NOT_FOUND: La solicitud no existe.");
+  }
+
+  const targetReq = existingReqList[0];
+
+  if (targetReq.status !== "IN_PROGRESS") {
+    throw new Error("INVALID_STATE: Solo una solicitud en proceso puede ser conciliada con el SII.");
+  }
+
+  // IDOR / Ownership Protection: Executor can only reconcile requests assigned to themselves (unless ADMIN)
+  if (currentUser.role === "INVOICE_EXECUTOR" && targetReq.assignedTo !== currentUser.id) {
+    throw new Error("FORBIDDEN: No puedes conciliar una solicitud asignada a otro ejecutor.");
+  }
+
+  // Calculate reconciliation deterministically
+  const reconciliation = calculateReconciliation(
+    targetReq.expectedGrossTotal,
+    input.siiGrossTotal
+  );
+
+  // Persist reconciliation state in PostgreSQL
+  const updatedList: InvoiceRequest[] = await db
+    .update(invoiceRequests)
+    .set({
+      siiGrossTotal: reconciliation.siiGrossTotal,
+      grossDifference: reconciliation.grossDifference,
+      reconciliationStatus: reconciliation.status,
+      updatedAt: sql`NOW()`,
+    })
+    .where(eq(invoiceRequests.id, requestId))
+    .returning();
+
+  const updatedReq = updatedList[0];
+
+  const itemsList = await db
+    .select()
+    .from(invoiceRequestItems)
+    .where(eq(invoiceRequestItems.invoiceRequestId, targetReq.id))
+    .orderBy(invoiceRequestItems.lineNumber);
+
+  await logAuditEvent({
+    userId: currentUser.id,
+    action: "REQUEST_RECONCILED",
+    entityType: "invoice_requests",
+    entityId: updatedReq.id,
+    metadata: {
+      requestNumber: updatedReq.requestNumber,
+      expectedGrossTotal: reconciliation.expectedGrossTotal,
+      siiGrossTotal: reconciliation.siiGrossTotal,
+      grossDifference: reconciliation.grossDifference,
+      reconciliationStatus: reconciliation.status,
+      canProceed: reconciliation.canProceed,
+    },
+    ipAddress,
+  });
+
+  return {
+    request: sanitizeQueueInvoiceRequest(updatedReq, itemsList),
+    reconciliation,
+  };
 }
 
 export function sanitizeQueueInvoiceRequest(

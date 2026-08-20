@@ -4,6 +4,8 @@
  * El c?lculo de neto para SII utiliza ROUND_HALF_UP a cero decimales.
  */
 
+import { ReconciliationStatus } from "./types";
+
 export const DEFAULT_VAT_RATE_PERCENT = 19.0;
 
 /**
@@ -109,6 +111,69 @@ export function calculateRequestTotals(
     expectedGrossTotal,
     expectedNetTotal,
     calculatedVatTotal: expectedGrossTotal - expectedNetTotal,
+  };
+}
+
+export interface ReconciliationResult {
+  expectedGrossTotal: number;
+  siiGrossTotal: number;
+  grossDifference: number;
+  status: ReconciliationStatus;
+  canProceed: boolean;
+  message: string;
+}
+
+/**
+ * Eval?a la cuadratura del SII contra el total solicitado.
+ * Reglas:
+ * - grossDifference = siiGrossTotal - expectedGrossTotal
+ * - Si grossDifference === 0 -> MATCH (canProceed: true)
+ * - Si ABS(grossDifference) <= 2 -> ROUNDING_ACCEPTED (canProceed: true)
+ * - Si ABS(grossDifference) > 2 -> MISMATCH (canProceed: false)
+ */
+export function calculateReconciliation(
+  expectedGrossTotal: number,
+  siiGrossTotal: number
+): ReconciliationResult {
+  if (!Number.isInteger(expectedGrossTotal) || expectedGrossTotal <= 0) {
+    throw new Error("El total solicitado esperado debe ser un entero positivo.");
+  }
+  if (!Number.isInteger(siiGrossTotal) || siiGrossTotal <= 0) {
+    throw new Error("El total mostrado por el SII debe ser un entero positivo.");
+  }
+
+  const grossDifference = siiGrossTotal - expectedGrossTotal;
+  const absDiff = Math.abs(grossDifference);
+
+  if (grossDifference === 0) {
+    return {
+      expectedGrossTotal,
+      siiGrossTotal,
+      grossDifference: 0,
+      status: "MATCH",
+      canProceed: true,
+      message: "Los valores coinciden exactamente.",
+    };
+  }
+
+  if (absDiff <= 2) {
+    return {
+      expectedGrossTotal,
+      siiGrossTotal,
+      grossDifference,
+      status: "ROUNDING_ACCEPTED",
+      canProceed: true,
+      message: `Diferencia de redondeo aceptada (${grossDifference > 0 ? `+${grossDifference}` : grossDifference} CLP).`,
+    };
+  }
+
+  return {
+    expectedGrossTotal,
+    siiGrossTotal,
+    grossDifference,
+    status: "MISMATCH",
+    canProceed: false,
+    message: `Los valores no coinciden (diferencia de ${grossDifference > 0 ? `+${grossDifference}` : grossDifference} CLP). Revisa los precios netos ingresados en el SII antes de continuar.`,
   };
 }
 

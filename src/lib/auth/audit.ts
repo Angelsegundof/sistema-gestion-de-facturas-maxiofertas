@@ -22,7 +22,8 @@ export type AuditAction =
   | "REQUEST_ASSIGNED"
   | "REQUEST_CORRECTION_REQUESTED"
   | "REQUEST_RESUBMITTED"
-  | "REQUEST_REASSIGNED";
+  | "REQUEST_REASSIGNED"
+  | "REQUEST_RECONCILED";
 
 export interface LogAuditParams {
   userId?: string | null;

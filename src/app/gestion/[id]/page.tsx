@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { formatCLP } from "@/domain/pricing";
+import { formatCLP, calculateReconciliation, ReconciliationResult } from "@/domain/pricing";
 import {
   SanitizedInvoiceRequest,
   RequestCorrectionReason,
@@ -36,6 +36,12 @@ export default function WorktablePage() {
   // Copy feedback state
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
+  // Reconciliation state
+  const [siiInput, setSiiInput] = useState<string>("");
+  const [reconciling, setReconciling] = useState(false);
+  const [reconciliationError, setReconciliationError] = useState<string | null>(null);
+  const [reconciliationSaved, setReconciliationSaved] = useState<ReconciliationResult | null>(null);
+
   // Observation Modal state
   const [showObservationModal, setShowObservationModal] = useState(false);
   const [selectedReason, setSelectedReason] = useState<RequestCorrectionReason>("INVALID_RUT");
@@ -56,7 +62,26 @@ export default function WorktablePage() {
         const res = await fetch(`/api/v1/invoice-requests/${requestId}`);
         const data = await res.json();
         if (data.success && data.data?.request) {
-          setRequestData(data.data.request);
+          const req: SanitizedInvoiceRequest = data.data.request;
+          setRequestData(req);
+          if (req.siiGrossTotal) {
+            setSiiInput(req.siiGrossTotal.toString());
+            if (req.reconciliationStatus && req.grossDifference !== null && req.grossDifference !== undefined) {
+              setReconciliationSaved({
+                expectedGrossTotal: req.expectedGrossTotal,
+                siiGrossTotal: req.siiGrossTotal,
+                grossDifference: req.grossDifference,
+                status: req.reconciliationStatus,
+                canProceed: req.reconciliationStatus !== "MISMATCH",
+                message:
+                  req.reconciliationStatus === "MATCH"
+                    ? "Los valores coinciden exactamente."
+                    : req.reconciliationStatus === "ROUNDING_ACCEPTED"
+                    ? `Diferencia de redondeo aceptada (${req.grossDifference > 0 ? `+${req.grossDifference}` : req.grossDifference} CLP).`
+                    : `Los valores no coinciden (diferencia de ${req.grossDifference > 0 ? `+${req.grossDifference}` : req.grossDifference} CLP). Revisa los precios netos ingresados en el SII antes de continuar.`,
+              });
+            }
+          }
         } else {
           setError(data.error?.message || "No se encontr? la solicitud de factura.");
         }
@@ -92,6 +117,46 @@ PRODUCTOS:
 ${itemsText}`;
 
     copyToClipboard(block, "Datos principales");
+  };
+
+  // Live preview calculation when typing SII total
+  const parsedSiiTotal = parseInt(siiInput.replace(/\D/g, ""), 10);
+  let liveReconciliation: ReconciliationResult | null = null;
+  if (requestData && !isNaN(parsedSiiTotal) && parsedSiiTotal > 0) {
+    try {
+      liveReconciliation = calculateReconciliation(requestData.expectedGrossTotal, parsedSiiTotal);
+    } catch {
+      liveReconciliation = null;
+    }
+  }
+
+  const handleSaveReconciliation = async () => {
+    if (!requestData || isNaN(parsedSiiTotal) || parsedSiiTotal <= 0) {
+      setReconciliationError("Ingresa un monto v?lido mayor a 0.");
+      return;
+    }
+
+    setReconciliationError(null);
+    setReconciling(true);
+    try {
+      const res = await fetch(`/api/v1/invoice-requests/${requestId}/reconcile`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ siiGrossTotal: parsedSiiTotal }),
+      });
+      const data = await res.json();
+
+      if (res.ok && data.success && data.data) {
+        setRequestData(data.data.request);
+        setReconciliationSaved(data.data.reconciliation);
+      } else {
+        setReconciliationError(data.error?.message || "Error al registrar la cuadratura.");
+      }
+    } catch {
+      setReconciliationError("Error de conexi?n al guardar la cuadratura.");
+    } finally {
+      setReconciling(false);
+    }
   };
 
   const handleSendObservation = async () => {
@@ -149,6 +214,8 @@ ${itemsText}`;
     );
   }
 
+  const activeReconciliation = liveReconciliation || reconciliationSaved;
+
   return (
     <div className="min-h-screen bg-slate-50 py-6 px-4 sm:px-6 lg:px-8">
       <div className="max-w-5xl mx-auto space-y-6">
@@ -181,6 +248,7 @@ ${itemsText}`;
 
             <div className="flex flex-wrap gap-2">
               <button
+                type="button"
                 onClick={copyAllMainData}
                 className="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-lg border border-slate-300 transition flex items-center gap-1.5"
               >
@@ -256,9 +324,12 @@ ${itemsText}`;
 
           {/* Bloque 2: Productos y Precios Netos */}
           <div>
-            <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-3">
-              2. Productos para ingresar en el SII
-            </h2>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
+                2. Productos para ingresar en el SII
+              </h2>
+              <span className="text-xs text-slate-500">Copia el Precio Neto calculado para ingresar en SII</span>
+            </div>
 
             <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
               <table className="w-full text-left text-xs">
@@ -268,7 +339,7 @@ ${itemsText}`;
                     <th className="py-3 px-4">Descripci?n del producto</th>
                     <th className="py-3 px-4 text-center">Cant.</th>
                     <th className="py-3 px-4 text-right">Precio Solicitado (IVA incl.)</th>
-                    <th className="py-3 px-4 text-right bg-blue-50/50 text-blue-950 font-bold">
+                    <th className="py-3 px-4 text-right bg-blue-50/70 text-blue-950 font-bold">
                       Precio Neto para SII
                     </th>
                     <th className="py-3 px-4 text-right">Total producto</th>
@@ -281,18 +352,18 @@ ${itemsText}`;
                       <td className="py-3 px-4 font-semibold text-slate-900">{item.description}</td>
                       <td className="py-3 px-4 text-center font-bold text-slate-800">{item.quantity}</td>
                       <td className="py-3 px-4 text-right text-slate-600">{formatCLP(item.unitPriceGross)}</td>
-                      <td className="py-3 px-4 text-right bg-blue-50/30">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <span className="font-mono font-bold text-blue-900 text-sm">
+                      <td className="py-3 px-4 text-right bg-blue-50/40">
+                        <div className="flex items-center justify-end gap-2">
+                          <span className="font-mono font-extrabold text-blue-900 text-sm">
                             {formatCLP(item.unitPriceNet)}
                           </span>
                           <button
                             type="button"
                             onClick={() =>
-                              copyToClipboard(item.unitPriceNet.toString(), `Precio neto #${item.lineNumber}`)
+                              copyToClipboard(item.unitPriceNet.toString(), "Precio neto")
                             }
-                            className="px-1.5 py-0.5 bg-blue-100 hover:bg-blue-200 text-blue-800 rounded font-semibold text-[10px] transition"
-                            title="Copiar precio neto al portapapeles"
+                            className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold text-xs transition shadow-sm"
+                            title="Copiar precio neto para SII"
                           >
                             Copiar
                           </button>
@@ -306,19 +377,124 @@ ${itemsText}`;
             </div>
           </div>
 
-          {/* Bloque 3: Total esperado y Observaciones */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
-            <div className="md:col-span-2 space-y-3">
-              <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Observaciones del solicitante</h3>
-              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-700 min-h-[80px]">
-                {requestData.notes || "Sin observaciones adicionales."}
+          {/* Bloque 3: Total esperado y Cuadratura SII */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+            {/* Total que debe dar en SII */}
+            <div className="bg-slate-900 text-white rounded-2xl p-6 flex flex-col justify-between shadow-sm">
+              <div>
+                <p className="text-xs uppercase text-slate-400 font-bold tracking-wider">
+                  TOTAL QUE DEBE DAR EN SII
+                </p>
+                <p className="text-4xl font-extrabold text-emerald-400 my-2">
+                  {formatCLP(requestData.expectedGrossTotal)}
+                </p>
+                <p className="text-xs text-slate-400">Todos los precios solicitados incluyen IVA (19%).</p>
               </div>
+
+              {requestData.notes && (
+                <div className="mt-4 pt-4 border-t border-slate-800">
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
+                    Observaciones del solicitante
+                  </p>
+                  <p className="text-xs text-slate-300 italic">{requestData.notes}</p>
+                </div>
+              )}
             </div>
 
-            <div className="bg-slate-900 text-white rounded-xl p-5 text-center shadow-sm">
-              <p className="text-xs uppercase text-slate-400 font-semibold">TOTAL QUE DEBE DAR EN SII</p>
-              <p className="text-3xl font-extrabold text-emerald-400 my-1">{formatCLP(requestData.expectedGrossTotal)}</p>
-              <p className="text-xs text-slate-400">Todos los precios incluyen IVA.</p>
+            {/* Ingreso y Validaci?n de Total SII */}
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 flex flex-col justify-between space-y-4">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-1">
+                  3. Cuadratura del total SII
+                </h3>
+                <p className="text-xs text-slate-500 mb-4">
+                  Ingresa el total final calculado por el portal del SII para verificar la cuadratura.
+                </p>
+
+                <div className="space-y-2">
+                  <label htmlFor="siiTotal" className="block text-xs font-bold text-slate-700">
+                    Total mostrado por SII *
+                  </label>
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <span className="absolute left-3.5 top-2.5 text-slate-400 text-base font-bold">$</span>
+                      <input
+                        id="siiTotal"
+                        type="number"
+                        min="1"
+                        value={siiInput}
+                        onChange={(e) => setSiiInput(e.target.value)}
+                        placeholder="Ej: 68000"
+                        className="w-full pl-8 pr-3 py-2 text-base font-mono font-bold bg-white border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleSaveReconciliation}
+                      disabled={reconciling || isNaN(parsedSiiTotal) || parsedSiiTotal <= 0}
+                      className="py-2 px-4 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-sm transition disabled:opacity-50"
+                    >
+                      {reconciling ? "Guardando..." : "Guardar cuadratura"}
+                    </button>
+                  </div>
+                  {reconciliationError && (
+                    <p className="text-xs text-rose-600 font-semibold">{reconciliationError}</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Feedback de Cuadratura */}
+              {activeReconciliation && (
+                <div className="mt-2">
+                  {activeReconciliation.status === "MATCH" && (
+                    <div className="p-4 bg-emerald-50 border-2 border-emerald-300 rounded-xl text-emerald-900 space-y-1">
+                      <div className="flex items-center gap-2 font-bold text-xs">
+                        <span>?</span>
+                        <span>Los valores coinciden exactamente. (MATCH)</span>
+                      </div>
+                      <p className="text-xs text-emerald-800">
+                        Solicitud: {formatCLP(activeReconciliation.expectedGrossTotal)} | SII:{" "}
+                        {formatCLP(activeReconciliation.siiGrossTotal)} | Diferencia: $0
+                      </p>
+                    </div>
+                  )}
+
+                  {activeReconciliation.status === "ROUNDING_ACCEPTED" && (
+                    <div className="p-4 bg-amber-50 border-2 border-amber-300 rounded-xl text-amber-900 space-y-1">
+                      <div className="flex items-center gap-2 font-bold text-xs">
+                        <span>?</span>
+                        <span>Diferencia de redondeo aceptada. (ROUNDING_ACCEPTED)</span>
+                      </div>
+                      <p className="text-xs text-amber-800">
+                        Solicitud: {formatCLP(activeReconciliation.expectedGrossTotal)} | SII:{" "}
+                        {formatCLP(activeReconciliation.siiGrossTotal)} | Diferencia:{" "}
+                        {activeReconciliation.grossDifference > 0
+                          ? `+${formatCLP(activeReconciliation.grossDifference)}`
+                          : formatCLP(activeReconciliation.grossDifference)}
+                      </p>
+                    </div>
+                  )}
+
+                  {activeReconciliation.status === "MISMATCH" && (
+                    <div className="p-4 bg-rose-50 border-2 border-rose-300 rounded-xl text-rose-900 space-y-1.5">
+                      <div className="flex items-center gap-2 font-bold text-xs text-rose-800">
+                        <span>?</span>
+                        <span>Los valores no coinciden (MISMATCH)</span>
+                      </div>
+                      <p className="text-xs text-rose-800">
+                        Solicitud: {formatCLP(activeReconciliation.expectedGrossTotal)} | SII:{" "}
+                        {formatCLP(activeReconciliation.siiGrossTotal)} | Diferencia:{" "}
+                        {activeReconciliation.grossDifference > 0
+                          ? `+${formatCLP(activeReconciliation.grossDifference)}`
+                          : formatCLP(activeReconciliation.grossDifference)}
+                      </p>
+                      <p className="text-xs font-semibold text-rose-700 bg-white/70 p-2 rounded border border-rose-200">
+                        Revisa los precios netos ingresados en el SII antes de continuar. La finalizaci?n normal est? bloqueada mientras exista discrepancia superior a ?$2.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -351,6 +527,7 @@ ${itemsText}`;
                   </p>
                 </div>
                 <button
+                  type="button"
                   onClick={() => setShowObservationModal(false)}
                   className="text-slate-400 hover:text-slate-600 text-sm font-bold"
                 >
