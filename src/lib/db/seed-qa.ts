@@ -3,7 +3,7 @@ dotenv.config({ path: ".env.local" });
 dotenv.config();
 
 import { eq } from "drizzle-orm";
-import { getDb } from "./index";
+import { getDb, runLocalMigrations } from "./index";
 import {
   warehouses,
   users,
@@ -20,11 +20,15 @@ import { calculateNetPrice, DEFAULT_VAT_RATE_PERCENT } from "../../domain/pricin
 
 export const QA_PASSWORD_PLAIN = "QA_password123!";
 
-async function main() {
+export async function seedQa() {
   const db = getDb();
   if (!db) {
     console.error("[ERROR] DATABASE_URL no está configurada.");
     process.exit(1);
+  }
+
+  if ((global as any).__localPgliteInstance) {
+    await runLocalMigrations((global as any).__localPgliteInstance);
   }
 
   console.log("===============================================================");
@@ -444,7 +448,9 @@ async function main() {
   console.log("===============================================================");
 }
 
-main().catch((err) => {
-  console.error("[FATAL ERROR SEED QA]", err);
-  process.exit(1);
-});
+if (process.argv[1] && process.argv[1].replace(/\\/g, "/").includes("seed-qa")) {
+  seedQa().catch((err) => {
+    console.error("[FATAL ERROR SEED QA]", err);
+    process.exit(1);
+  });
+}

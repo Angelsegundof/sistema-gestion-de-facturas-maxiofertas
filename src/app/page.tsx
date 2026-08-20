@@ -5,7 +5,7 @@ import { Role } from "@/domain/types";
 
 const ROLE_LABELS: Record<Role, string> = {
   WAREHOUSE_USER: "Solicitante / Bodega",
-  INVOICE_EXECUTOR: "Ejecutor de Facturaci?n",
+  INVOICE_EXECUTOR: "Ejecutor de Facturación",
   MANAGEMENT: "Jefatura / Gerencia",
   ADMIN: "Administrador del Sistema",
 };
@@ -28,24 +28,24 @@ export default async function HomePage() {
             M
           </div>
           <h1 className="text-2xl font-bold text-slate-900 mb-2">
-            Sistema de Gesti?n de Facturas Maxiofertas
+            Sistema de Gestión de Facturas Maxiofertas
           </h1>
           <p className="text-sm text-slate-600 mb-6">
-            Plataforma interna independiente de gesti?n tributaria y emisi?n de facturas.
+            Plataforma interna independiente de gestión tributaria y emisión de facturas.
           </p>
           <div className="p-4 bg-slate-50 rounded-xl text-left text-xs text-slate-600 border border-slate-200 mb-6">
             <p className="font-semibold text-slate-800 mb-1">Estado de Seguridad y Acceso:</p>
             <ul className="list-disc pl-4 space-y-1">
-              <li>Autenticaci?n propia mediante sesiones server-side e HttpOnly cookies.</li>
-              <li>Autorizaci?n basada en roles con pol?tica Default Deny.</li>
-              <li>Auditor?a transaccional de accesos e identidades.</li>
+              <li>Autenticación propia mediante sesiones server-side e HttpOnly cookies.</li>
+              <li>Autorizaci?n basada en roles con política Default Deny.</li>
+              <li>Auditoría transaccional de accesos e identidades.</li>
             </ul>
           </div>
           <Link
             href="/login"
             className="inline-flex w-full items-center justify-center rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 transition-colors"
           >
-            Iniciar Sesi?n
+            Iniciar Sesión
           </Link>
         </div>
       </main>
@@ -64,10 +64,10 @@ export default async function HomePage() {
             </div>
             <div>
               <h1 className="text-lg font-bold text-slate-900">
-                Sistema de Gesti?n de Facturas
+                Sistema de Gestión de Facturas
               </h1>
               <p className="text-xs text-slate-500">
-                Maxiofertas ? Sesi?n Autenticada
+                Maxiofertas ? Sesión Autenticada
               </p>
             </div>
           </div>
@@ -81,14 +81,14 @@ export default async function HomePage() {
           </div>
         </header>
 
-        {/* Acciones principales seg?n Rol */}
+        {/* Acciones principales según Rol */}
         {(user.role === "INVOICE_EXECUTOR" || user.role === "ADMIN" || user.role === "MANAGEMENT") && (
           <section className="p-6 bg-gradient-to-r from-blue-900 to-indigo-950 text-white rounded-2xl shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
               <span className="text-xs font-bold uppercase tracking-wider text-blue-300">
-                M?dulo Operacional ? Fase 5
+                Módulo Operacional ? Fase 5
               </span>
-              <h2 className="text-xl font-bold mt-1">Cola de Facturaci?n y Mesa de Trabajo</h2>
+              <h2 className="text-xl font-bold mt-1">Cola de Facturación y Mesa de Trabajo</h2>
               <p className="text-xs text-slate-300 mt-1 max-w-md">
                 Consulta las facturas pendientes ordenadas por antig?edad (FIFO), toma solicitudes y gestiona observaciones.
               </p>
@@ -97,7 +97,7 @@ export default async function HomePage() {
               href="/gestion"
               className="inline-flex items-center justify-center py-3 px-6 bg-blue-500 hover:bg-blue-600 text-white font-bold text-sm rounded-xl shadow-md transition"
             >
-              ?? Ir a Gesti?n de Facturas
+              ?? Ir a Gestión de Facturas
             </Link>
           </section>
         )}
@@ -106,11 +106,11 @@ export default async function HomePage() {
           <section className="p-6 bg-gradient-to-r from-slate-900 to-emerald-950 text-white rounded-2xl shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
               <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
-                M?dulo Solicitante
+                Módulo Solicitante
               </span>
               <h2 className="text-xl font-bold mt-1">Crear Solicitud de Factura</h2>
               <p className="text-xs text-slate-300 mt-1 max-w-md">
-                Ingresa los datos del cliente y productos con precios IVA incluido para enviar a facturaci?n.
+                Ingresa los datos del cliente y productos con precios IVA incluido para enviar a facturación.
               </p>
             </div>
             <Link
@@ -132,7 +132,7 @@ export default async function HomePage() {
               <span className="font-medium text-slate-800">{user.name}</span>
             </div>
             <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
-              <span className="text-xs text-slate-500 block">Correo Electr?nico</span>
+              <span className="text-xs text-slate-500 block">Correo Electrónico</span>
               <span className="font-medium text-slate-800">{user.email}</span>
             </div>
             <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">

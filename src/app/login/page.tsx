@@ -10,12 +10,10 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const executeLogin = async (loginEmail: string, loginPass: string) => {
     setError(null);
-
-    if (!email || !password) {
-      setError("Por favor completa tu correo y contrase?a.");
+    if (!loginEmail || !loginPass) {
+      setError("Por favor completa tu correo y contraseña.");
       return;
     }
 
@@ -26,7 +24,7 @@ export default function LoginPage() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: loginEmail, password: loginPass }),
       });
 
       const data = await response.json();
@@ -34,7 +32,7 @@ export default function LoginPage() {
       if (!response.ok || !data.success) {
         setError(
           data.error?.message ||
-            "No fue posible iniciar sesi?n. Verifica tus credenciales."
+            "No fue posible iniciar sesión. Verifica tus credenciales."
         );
         setLoading(false);
         return;
@@ -43,9 +41,14 @@ export default function LoginPage() {
       router.push("/");
       router.refresh();
     } catch {
-      setError("Ocurri? un error de conexi?n al servidor. Int?ntalo nuevamente.");
+      setError("Ocurrió un error de conexión al servidor. Inténtalo nuevamente.");
       setLoading(false);
     }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await executeLogin(email, password);
   };
 
   return (
@@ -56,10 +59,10 @@ export default function LoginPage() {
             M
           </div>
           <h1 className="text-xl font-bold text-slate-900">
-            Sistema de Gesti?n de Facturas
+            Sistema de Gestión de Facturas
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Maxiofertas ? Acceso Interno Autorizado
+            Maxiofertas — Acceso Interno Autorizado
           </p>
         </div>
 
@@ -75,7 +78,7 @@ export default function LoginPage() {
               htmlFor="email"
               className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1"
             >
-              Correo Electr?nico
+              Correo Electrónico
             </label>
             <input
               id="email"
@@ -94,7 +97,7 @@ export default function LoginPage() {
               htmlFor="password"
               className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1"
             >
-              Contrase?a
+              Contraseña
             </label>
             <input
               id="password"
@@ -103,7 +106,7 @@ export default function LoginPage() {
               autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="????????"
+              placeholder="••••••••"
               className="w-full rounded-lg border border-slate-300 px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600"
             />
           </div>
@@ -121,10 +124,10 @@ export default function LoginPage() {
           <div className="mt-6 rounded-xl bg-amber-50 p-4 border border-amber-200">
             <div className="flex items-center gap-1.5 font-bold text-xs text-amber-900 mb-2">
               <span>🧪</span>
-              <span>Acceso Rápido QA Local (Desarrollo)</span>
+              <span>Acceso Rápido QA Local (1 Clic)</span>
             </div>
             <p className="text-[11px] text-amber-800 mb-3">
-              Haz clic en cualquier rol para auto-completar credenciales e ingresar:
+              Selecciona un rol para iniciar sesión instantáneamente:
             </p>
             <div className="grid grid-cols-1 gap-1.5">
               {[
@@ -137,11 +140,13 @@ export default function LoginPage() {
                 <button
                   key={q.email}
                   type="button"
+                  disabled={loading}
                   onClick={() => {
                     setEmail(q.email);
                     setPassword("QA_password123!");
+                    executeLogin(q.email, "QA_password123!");
                   }}
-                  className="flex items-center justify-between rounded-lg bg-white p-2 border border-amber-200 hover:border-amber-400 text-left text-xs text-slate-800 shadow-2xs hover:bg-amber-100/50 transition-all"
+                  className="flex items-center justify-between rounded-lg bg-white p-2 border border-amber-200 hover:border-amber-400 text-left text-xs text-slate-800 shadow-2xs hover:bg-amber-100/50 transition-all disabled:opacity-50"
                 >
                   <span className="font-semibold text-slate-900">{q.label}</span>
                   <span className="text-[10px] text-slate-500">{q.desc}</span>

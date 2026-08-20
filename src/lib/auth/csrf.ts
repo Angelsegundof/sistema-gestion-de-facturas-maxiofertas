@@ -17,7 +17,7 @@ export function verifyCsrfOrigin(request: NextRequest): CsrfValidationResult {
   if (secFetchSite === "cross-site") {
     return {
       valid: false,
-      reason: "Petici?n cross-site denegada por pol?tica de seguridad CSRF.",
+      reason: "Petición cross-site denegada por política de seguridad CSRF.",
     };
   }
 
@@ -40,7 +40,7 @@ export function verifyCsrfOrigin(request: NextRequest): CsrfValidationResult {
     } catch {
       return {
         valid: false,
-        reason: "Encabezado Origin con formato inv?lido.",
+        reason: "Encabezado Origin con formato inválido.",
       };
     }
   }

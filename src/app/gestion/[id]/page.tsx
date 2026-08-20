@@ -151,7 +151,7 @@ ${itemsText}`;
 
   const handleSaveReconciliation = async () => {
     if (!requestData || isNaN(parsedSiiTotal) || parsedSiiTotal <= 0) {
-      setReconciliationError("Ingresa un monto v?lido mayor a 0.");
+      setReconciliationError("Ingresa un monto válido mayor a 0.");
       return;
     }
 
@@ -271,10 +271,10 @@ ${itemsText}`;
       if (res.ok && data.success) {
         router.push("/gestion");
       } else {
-        setObservationError(data.error?.message || "Ocurri? un error al enviar la observaci?n.");
+        setObservationError(data.error?.message || "Ocurrió un error al enviar la observación.");
       }
     } catch {
-      setObservationError("Error de conexi?n al enviar la observaci?n.");
+      setObservationError("Error de conexi?n al enviar la observación.");
     } finally {
       setSubmittingObservation(false);
     }

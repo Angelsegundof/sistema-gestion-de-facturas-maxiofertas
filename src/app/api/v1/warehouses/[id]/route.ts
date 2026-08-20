@@ -21,7 +21,7 @@ export async function PATCH(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
-  // 1. Verificaci?n CSRF / Same-Origin
+  // 1. Verificación CSRF / Same-Origin
   const csrfCheck = verifyCsrfOrigin(request);
   if (!csrfCheck.valid) {
     return NextResponse.json<ApiResponse<null>>(
@@ -29,7 +29,7 @@ export async function PATCH(
         success: false,
         error: {
           code: "CSRF_FORBIDDEN",
-          message: csrfCheck.reason || "Petici?n no permitida por pol?tica de origen.",
+          message: csrfCheck.reason || "Petición no permitida por política de origen.",
         },
       },
       { status: 403 }
@@ -61,7 +61,7 @@ export async function PATCH(
     body = await request.json();
   } catch {
     return NextResponse.json<ApiResponse<null>>(
-      { success: false, error: { code: "INVALID_BODY", message: "Cuerpo de solicitud inv?lido" } },
+      { success: false, error: { code: "INVALID_BODY", message: "Cuerpo de solicitud inválido" } },
       { status: 400 }
     );
   }
@@ -73,7 +73,7 @@ export async function PATCH(
         success: false,
         error: {
           code: "VALIDATION_ERROR",
-          message: "Datos de actualizaci?n inv?lidos.",
+          message: "Datos de actualización inválidos.",
           details: parsed.error.flatten().fieldErrors,
         },
       },

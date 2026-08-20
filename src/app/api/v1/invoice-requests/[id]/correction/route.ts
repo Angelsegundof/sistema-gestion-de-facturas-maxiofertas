@@ -8,15 +8,15 @@ import { ApiResponse, SanitizedInvoiceRequest } from "@/types";
 const correctRequestSchema = z.object({
   customer: z.object({
     rut: z.string().min(3, "El RUT es obligatorio").max(20),
-    legalName: z.string().min(2, "La raz?n social debe tener al menos 2 caracteres").max(200),
+    legalName: z.string().min(2, "La razón social debe tener al menos 2 caracteres").max(200),
     businessActivity: z.string().min(2, "El giro debe tener al menos 2 caracteres").max(250),
     phone: z.string().max(50).optional().nullable(),
-    email: z.string().email("Correo electr?nico inv?lido").max(320).optional().nullable(),
+    email: z.string().email("Correo electrónico inválido").max(320).optional().nullable(),
   }),
   items: z
     .array(
       z.object({
-        description: z.string().min(1, "La descripci?n del producto es obligatoria").max(500),
+        description: z.string().min(1, "La descripción del producto es obligatoria").max(500),
         quantity: z.number().int("La cantidad debe ser entera").positive("La cantidad debe ser mayor a 0"),
         unitPriceGross: z.number().int("El precio debe ser entero").positive("El precio debe ser mayor a 0"),
       })
@@ -49,7 +49,7 @@ export async function PATCH(
   const csrfCheck = verifyCsrfOrigin(request);
   if (!csrfCheck.valid) {
     return NextResponse.json<ApiResponse<null>>(
-      { success: false, error: { code: "CSRF_ERROR", message: csrfCheck.reason || "Error de validaci?n CSRF" } },
+      { success: false, error: { code: "CSRF_ERROR", message: csrfCheck.reason || "Error de validación CSRF" } },
       { status: 403 }
     );
   }
@@ -59,7 +59,7 @@ export async function PATCH(
     body = await request.json();
   } catch {
     return NextResponse.json<ApiResponse<null>>(
-      { success: false, error: { code: "INVALID_JSON", message: "Cuerpo de solicitud inv?lido." } },
+      { success: false, error: { code: "INVALID_JSON", message: "Cuerpo de solicitud inválido." } },
       { status: 400 }
     );
   }
@@ -71,7 +71,7 @@ export async function PATCH(
         success: false,
         error: {
           code: "VALIDATION_ERROR",
-          message: "Los datos de correcci?n no son v?lidos.",
+          message: "Los datos de corrección no son válidos.",
           details: { errors: parseResult.error.format() },
         },
       },
@@ -125,7 +125,7 @@ export async function PATCH(
 
     if (msg.startsWith("INVALID_RUT")) {
       return NextResponse.json<ApiResponse<null>>(
-        { success: false, error: { code: "INVALID_RUT", message: "El RUT ingresado no es v?lido seg?n el algoritmo m?dulo 11." } },
+        { success: false, error: { code: "INVALID_RUT", message: "El RUT ingresado no es válido según el algoritmo módulo 11." } },
         { status: 422 }
       );
     }

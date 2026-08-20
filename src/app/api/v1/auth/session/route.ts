@@ -13,7 +13,7 @@ export async function GET() {
         success: false,
         error: {
           code: "UNAUTHORIZED",
-          message: "No existe una sesi?n activa o el usuario est? deshabilitado.",
+          message: "No existe una sesión activa o el usuario está deshabilitado.",
         },
       },
       { status: 401 }

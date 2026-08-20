@@ -1,4 +1,4 @@
-﻿# Dependencies
+# Dependencies
 /node_modules
 /.pnp
 .pnp.js
@@ -43,3 +43,7 @@ Thumbs.db
 
 # Cloudflare Wrangler
 .wrangler
+
+# Local SQLite / PGlite data
+.data/
+

@@ -12,6 +12,7 @@ import {
   rectifications,
   creditNotes,
 } from "../src/lib/db/schema";
+import { seedQa } from "../src/lib/db/seed-qa";
 
 async function resetQa() {
   if (process.env.NODE_ENV === "production") {
@@ -49,7 +50,7 @@ async function resetQa() {
 
   console.log("Solicitudes previas de QA eliminadas.");
   console.log("Re-ejecutando seed QA...");
-  require("../src/lib/db/seed-qa");
+  await seedQa();
 }
 
 resetQa().catch((err) => {

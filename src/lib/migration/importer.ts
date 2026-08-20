@@ -464,7 +464,7 @@ export async function executeLoad(
             email: s.customerEmail,
             active: true,
           })
-          .returning({ id: customers.id });
+          .returning();
         customerId = newCust.id;
         createdCustomersCount++;
       }
@@ -474,7 +474,7 @@ export async function executeLoad(
       const requestNumber = `FAC-LEGACY-${paddedNum}`;
 
       // D. Insert Invoice Request
-      const [newReq] = await db
+      const [newReq] = await (db as any)
         .insert(invoiceRequests)
         .values({
           requestNumber,
@@ -498,7 +498,7 @@ export async function executeLoad(
           createdAt: s.createdAt,
           completedAt: s.completedAt,
         })
-        .returning({ id: invoiceRequests.id });
+        .returning();
 
       // E. Insert Invoice Request Item
       const firstItem = s.items[0];

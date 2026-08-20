@@ -13,7 +13,7 @@ import {
 import { ApiResponse, SanitizedWarehouse } from "@/types";
 
 const createWarehouseSchema = z.object({
-  code: z.string().min(2, "El c?digo debe tener al menos 2 caracteres").max(50),
+  code: z.string().min(2, "El código debe tener al menos 2 caracteres").max(50),
   name: z.string().min(2, "El nombre debe tener al menos 2 caracteres").max(150),
 });
 
@@ -87,7 +87,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  // 1. Verificaci?n CSRF / Same-Origin
+  // 1. Verificación CSRF / Same-Origin
   const csrfCheck = verifyCsrfOrigin(request);
   if (!csrfCheck.valid) {
     return NextResponse.json<ApiResponse<null>>(
@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
         success: false,
         error: {
           code: "CSRF_FORBIDDEN",
-          message: csrfCheck.reason || "Petici?n no permitida por pol?tica de origen.",
+          message: csrfCheck.reason || "Petición no permitida por política de origen.",
         },
       },
       { status: 403 }
@@ -126,7 +126,7 @@ export async function POST(request: NextRequest) {
     body = await request.json();
   } catch {
     return NextResponse.json<ApiResponse<null>>(
-      { success: false, error: { code: "INVALID_BODY", message: "Cuerpo de solicitud inv?lido" } },
+      { success: false, error: { code: "INVALID_BODY", message: "Cuerpo de solicitud inválido" } },
       { status: 400 }
     );
   }
@@ -138,7 +138,7 @@ export async function POST(request: NextRequest) {
         success: false,
         error: {
           code: "VALIDATION_ERROR",
-          message: "Datos de bodega inv?lidos.",
+          message: "Datos de bodega inválidos.",
           details: parsed.error.flatten().fieldErrors,
         },
       },
@@ -169,7 +169,7 @@ export async function POST(request: NextRequest) {
         success: false,
         error: {
           code: "WAREHOUSE_CODE_EXISTS",
-          message: `Ya existe una bodega con el c?digo '${normalizedCode}'.`,
+          message: `Ya existe una bodega con el código '${normalizedCode}'.`,
         },
       },
       { status: 409 }

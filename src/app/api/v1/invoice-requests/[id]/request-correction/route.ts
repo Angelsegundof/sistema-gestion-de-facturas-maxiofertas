@@ -8,7 +8,7 @@ import { ApiResponse, SanitizedInvoiceRequest } from "@/types";
 
 const requestCorrectionSchema = z.object({
   reason: z.enum(requestCorrectionReasons, {
-    message: "El motivo de correcci?n seleccionado no es v?lido.",
+    message: "El motivo de corrección seleccionado no es válido.",
   }),
   comment: z.string().max(2000, "El comentario no puede superar los 2.000 caracteres.").optional().nullable(),
 });
@@ -36,7 +36,7 @@ export async function POST(
   const csrfCheck = verifyCsrfOrigin(request);
   if (!csrfCheck.valid) {
     return NextResponse.json<ApiResponse<null>>(
-      { success: false, error: { code: "CSRF_ERROR", message: csrfCheck.reason || "Error de validaci?n CSRF" } },
+      { success: false, error: { code: "CSRF_ERROR", message: csrfCheck.reason || "Error de validación CSRF" } },
       { status: 403 }
     );
   }
@@ -53,7 +53,7 @@ export async function POST(
     body = await request.json();
   } catch {
     return NextResponse.json<ApiResponse<null>>(
-      { success: false, error: { code: "INVALID_JSON", message: "Cuerpo de solicitud inv?lido." } },
+      { success: false, error: { code: "INVALID_JSON", message: "Cuerpo de solicitud inválido." } },
       { status: 400 }
     );
   }
@@ -65,7 +65,7 @@ export async function POST(
         success: false,
         error: {
           code: "VALIDATION_ERROR",
-          message: "Datos de observaci?n inv?lidos.",
+          message: "Datos de observación inválidos.",
           details: { errors: parseResult.error.format() },
         },
       },

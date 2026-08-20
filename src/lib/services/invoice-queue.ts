@@ -210,7 +210,7 @@ export async function claimInvoiceRequestService(
   }
 
   if (currentUser.role !== "INVOICE_EXECUTOR" && currentUser.role !== "ADMIN") {
-    throw new Error("FORBIDDEN: No tienes permisos para tomar solicitudes de facturaci?n.");
+    throw new Error("FORBIDDEN: No tienes permisos para tomar solicitudes de facturación.");
   }
 
   // Atomic claim: Only exactly 1 winner will get rows affected = 1
@@ -250,13 +250,13 @@ export async function claimInvoiceRequestService(
     const current = existingReq[0];
     if (current.request.status !== "PENDING") {
       throw new Error(
-        `REQUEST_NOT_PENDING: La solicitud ${current.request.requestNumber} ya no est? pendiente (estado actual: ${current.request.status}).`
+        `REQUEST_NOT_PENDING: La solicitud ${current.request.requestNumber} ya no está pendiente (estado actual: ${current.request.status}).`
       );
     }
 
     const assignedToName = current.assignedUserName || "otro ejecutor";
     throw new Error(
-      `REQUEST_ALREADY_CLAIMED: Esta solicitud ya est? siendo gestionada por ${assignedToName}.`
+      `REQUEST_ALREADY_CLAIMED: Esta solicitud ya está siendo gestionada por ${assignedToName}.`
     );
   }
 
@@ -315,7 +315,7 @@ export async function requestCorrectionService(
   const targetReq = existingReqList[0];
 
   if (targetReq.status !== "IN_PROGRESS") {
-    throw new Error("INVALID_STATE: Solo una solicitud en proceso puede ser enviada a correcci?n.");
+    throw new Error("INVALID_STATE: Solo una solicitud en proceso puede ser enviada a corrección.");
   }
 
   // IDOR Protection: Executor can only observe requests assigned to themselves (unless ADMIN)
@@ -405,7 +405,7 @@ export async function correctAndResubmitService(
   const targetReq = existingReqList[0];
 
   if (targetReq.status !== "NEEDS_CORRECTION") {
-    throw new Error("INVALID_STATE: La solicitud no se encuentra en estado de correcci?n.");
+    throw new Error("INVALID_STATE: La solicitud no se encuentra en estado de corrección.");
   }
 
   // IDOR Protection: Warehouse user can ONLY correct their own requests (unless ADMIN)
@@ -416,7 +416,7 @@ export async function correctAndResubmitService(
   // Validate RUT & customer fields
   const rawRut = input.customer.rut.trim();
   if (!validateRut(rawRut)) {
-    throw new Error("INVALID_RUT: El RUT ingresado no es v?lido.");
+    throw new Error("INVALID_RUT: El RUT ingresado no es válido.");
   }
 
   const displayRut = formatRut(rawRut);
@@ -521,7 +521,7 @@ export async function reassignInvoiceRequestService(
     .limit(1);
 
   if (targetUser.length === 0) {
-    throw new Error("NOT_FOUND: El usuario ejecutor destino no existe o est? inactivo.");
+    throw new Error("NOT_FOUND: El usuario ejecutor destino no existe o está inactivo.");
   }
 
   const updatedReqList: InvoiceRequest[] = await db

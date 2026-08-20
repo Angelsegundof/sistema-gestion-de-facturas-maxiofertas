@@ -145,7 +145,7 @@ export async function createInvoiceRequestService(
   // 2. Validar y normalizar RUT del cliente
   const rawRut = input.customer.rut.trim();
   if (!validateRut(rawRut)) {
-    throw new Error("El RUT del cliente no es v?lido seg?n el algoritmo m?dulo 11.");
+    throw new Error("El RUT del cliente no es válido según el algoritmo módulo 11.");
   }
 
   const canonicalRut = normalizeRut(rawRut);
@@ -206,7 +206,7 @@ export async function createInvoiceRequestService(
   });
 
   if (candidate && !input.duplicateOverride) {
-    // Registrar advertencia en auditor?a
+    // Registrar advertencia en auditoría
     await logAuditEvent({
       userId: currentUser.id,
       action: "DUPLICATE_WARNING_SHOWN",
@@ -263,7 +263,7 @@ export async function createInvoiceRequestService(
     }
   }
 
-  // 7. Generar n?mero de solicitud ?nico
+  // 7. Generar número de solicitud ?nico
   const requestNumber = await generateRequestNumber(db);
 
   // 8. Insertar solicitud de factura con snapshots inmutables
@@ -292,7 +292,7 @@ export async function createInvoiceRequestService(
 
   const newRequest = insertedRequests[0];
 
-  // 9. Insertar l?neas estructuradas
+  // 9. Insertar líneas estructuradas
   const itemsToInsert = calculatedTotals.items.map((item) => ({
     invoiceRequestId: newRequest.id,
     lineNumber: item.lineNumber,
@@ -310,7 +310,7 @@ export async function createInvoiceRequestService(
     .values(itemsToInsert)
     .returning();
 
-  // 10. Auditor?a de creaci?n y override
+  // 10. Auditoría de creación y override
   if (candidate && input.duplicateOverride) {
     await logAuditEvent({
       userId: currentUser.id,

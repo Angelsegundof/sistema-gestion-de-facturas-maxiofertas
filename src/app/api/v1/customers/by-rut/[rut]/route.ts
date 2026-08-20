@@ -34,7 +34,7 @@ export async function GET(
         success: false,
         error: {
           code: "INVALID_RUT",
-          message: "El RUT ingresado no es v?lido seg?n el algoritmo m?dulo 11.",
+          message: "El RUT ingresado no es válido según el algoritmo módulo 11.",
         },
       },
       { status: 400 }

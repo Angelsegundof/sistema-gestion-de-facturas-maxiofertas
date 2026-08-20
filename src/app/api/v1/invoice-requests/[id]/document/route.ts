@@ -27,7 +27,7 @@ export async function POST(
   const csrfCheck = verifyCsrfOrigin(request);
   if (!csrfCheck.valid) {
     return NextResponse.json<ApiResponse<null>>(
-      { success: false, error: { code: "CSRF_ERROR", message: csrfCheck.reason || "Error de validaci?n CSRF" } },
+      { success: false, error: { code: "CSRF_ERROR", message: csrfCheck.reason || "Error de validación CSRF" } },
       { status: 403 }
     );
   }
@@ -47,7 +47,7 @@ export async function POST(
     formData = await request.formData();
   } catch {
     return NextResponse.json<ApiResponse<null>>(
-      { success: false, error: { code: "INVALID_MULTIPART", message: "Se esperaba un formulario multipart/form-data v?lido." } },
+      { success: false, error: { code: "INVALID_MULTIPART", message: "Se esperaba un formulario multipart/form-data válido." } },
       { status: 400 }
     );
   }

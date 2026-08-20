@@ -84,7 +84,7 @@ export default function CorregirSolicitudPage() {
     const trimmed = rut.trim();
     if (!trimmed) return;
     if (!validateRut(trimmed)) {
-      setRutError("Revisa el RUT. Parece estar incompleto o ser inv?lido.");
+      setRutError("Revisa el RUT. Parece estar incompleto o ser inválido.");
       return;
     }
     setRutError(null);
@@ -125,11 +125,11 @@ export default function CorregirSolicitudPage() {
     setFormError(null);
 
     if (!validateRut(rut)) {
-      setRutError("Ingresa un RUT v?lido para continuar.");
+      setRutError("Ingresa un RUT válido para continuar.");
       return;
     }
     if (!legalName.trim()) {
-      setFormError("La raz?n social es obligatoria.");
+      setFormError("La razón social es obligatoria.");
       return;
     }
     if (!businessActivity.trim()) {
@@ -137,7 +137,7 @@ export default function CorregirSolicitudPage() {
       return;
     }
     if (items.some((i) => !i.description.trim() || i.quantity <= 0 || i.unitPriceGross <= 0)) {
-      setFormError("Todos los productos deben tener descripci?n, cantidad (>0) y precio (>0).");
+      setFormError("Todos los productos deben tener descripción, cantidad (>0) y precio (>0).");
       return;
     }
 
@@ -169,10 +169,10 @@ export default function CorregirSolicitudPage() {
       if (res.ok && data.success) {
         router.push(`/requests/${requestId}`);
       } else {
-        setFormError(data.error?.message || "Ocurri? un error al guardar la correcci?n.");
+        setFormError(data.error?.message || "Ocurrió un error al guardar la corrección.");
       }
     } catch {
-      setFormError("Error de conexi?n al enviar la correcci?n.");
+      setFormError("Error de conexi?n al enviar la corrección.");
     } finally {
       setSubmitting(false);
     }
@@ -205,7 +205,7 @@ export default function CorregirSolicitudPage() {
           <div className="bg-rose-50 border-2 border-rose-300 rounded-xl p-5 shadow-sm space-y-2">
             <div className="flex items-center gap-2 text-rose-800 text-xs font-bold uppercase tracking-wider">
               <span>?</span>
-              <span>Esta solicitud necesita una correcci?n</span>
+              <span>Esta solicitud necesita una corrección</span>
             </div>
             <div className="text-xs text-slate-800">
               <strong className="text-slate-900">Motivo:</strong> {latestCorrection.reason}
@@ -247,7 +247,7 @@ export default function CorregirSolicitudPage() {
 
             <div>
               <label htmlFor="legalName" className="block text-xs font-semibold text-slate-700 mb-1">
-                Raz?n social *
+                Razón social *
               </label>
               <input
                 id="legalName"
@@ -276,7 +276,7 @@ export default function CorregirSolicitudPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label htmlFor="phone" className="block text-xs font-semibold text-slate-700 mb-1">
-                  Tel?fono (opcional)
+                  Teléfono (opcional)
                 </label>
                 <input
                   id="phone"
@@ -288,7 +288,7 @@ export default function CorregirSolicitudPage() {
               </div>
               <div>
                 <label htmlFor="email" className="block text-xs font-semibold text-slate-700 mb-1">
-                  Correo electr?nico (opcional)
+                  Correo electrónico (opcional)
                 </label>
                 <input
                   id="email"
@@ -331,7 +331,7 @@ export default function CorregirSolicitudPage() {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">Descripci?n *</label>
+                      <label className="block text-xs font-medium text-slate-700 mb-1">Descripción *</label>
                       <input
                         type="text"
                         value={item.description}

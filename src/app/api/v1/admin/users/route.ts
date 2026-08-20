@@ -14,9 +14,9 @@ import {
 import { ApiResponse, SanitizedUser } from "@/types";
 
 const createUserSchema = z.object({
-  email: z.string().email("Formato de correo inv?lido"),
+  email: z.string().email("Formato de correo inválido"),
   name: z.string().min(2, "El nombre debe tener al menos 2 caracteres").max(150),
-  password: z.string().min(1, "La contrase?a es requerida"),
+  password: z.string().min(1, "La contraseña es requerida"),
   role: z.enum(rolesEnum),
   warehouseId: z.string().uuid().nullable().optional(),
 });
@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  // 1. Verificaci?n CSRF / Same-Origin
+  // 1. Verificación CSRF / Same-Origin
   const csrfCheck = verifyCsrfOrigin(request);
   if (!csrfCheck.valid) {
     return NextResponse.json<ApiResponse<null>>(
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
         success: false,
         error: {
           code: "CSRF_FORBIDDEN",
-          message: csrfCheck.reason || "Petici?n no permitida por pol?tica de origen.",
+          message: csrfCheck.reason || "Petición no permitida por política de origen.",
         },
       },
       { status: 403 }
@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
     body = await request.json();
   } catch {
     return NextResponse.json<ApiResponse<null>>(
-      { success: false, error: { code: "INVALID_BODY", message: "Cuerpo de solicitud inv?lido" } },
+      { success: false, error: { code: "INVALID_BODY", message: "Cuerpo de solicitud inválido" } },
       { status: 400 }
     );
   }
@@ -117,7 +117,7 @@ export async function POST(request: NextRequest) {
         success: false,
         error: {
           code: "VALIDATION_ERROR",
-          message: "Datos de usuario inv?lidos.",
+          message: "Datos de usuario inválidos.",
           details: parsed.error.flatten().fieldErrors,
         },
       },
@@ -125,7 +125,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // 2. Validaci?n de pol?tica de contrase?as
+  // 2. Validación de política de contraseñas
   const passCheck = validatePasswordPolicy(parsed.data.password);
   if (!passCheck.valid) {
     return NextResponse.json<ApiResponse<null>>(
@@ -133,7 +133,7 @@ export async function POST(request: NextRequest) {
         success: false,
         error: {
           code: "WEAK_PASSWORD",
-          message: passCheck.message || "La contrase?a no cumple con las pol?ticas de seguridad.",
+          message: passCheck.message || "La contraseña no cumple con las políticas de seguridad.",
         },
       },
       { status: 400 }
@@ -162,7 +162,7 @@ export async function POST(request: NextRequest) {
         success: false,
         error: {
           code: "EMAIL_ALREADY_EXISTS",
-          message: "Ya existe un usuario registrado con este correo electr?nico.",
+          message: "Ya existe un usuario registrado con este correo electrónico.",
         },
       },
       { status: 409 }

@@ -2,7 +2,7 @@ import { Permission, Role } from "./types";
 
 /**
  * Matriz oficial de Roles y Permisos (v1.0)
- * Implementaci?n con pol?tica DEFAULT DENY.
+ * Implementaci?n con política DEFAULT DENY.
  */
 const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   WAREHOUSE_USER: [

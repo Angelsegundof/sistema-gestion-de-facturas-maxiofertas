@@ -6,8 +6,8 @@ import { reassignInvoiceRequestService } from "@/lib/services/invoice-queue";
 import { ApiResponse, SanitizedInvoiceRequest } from "@/types";
 
 const reassignSchema = z.object({
-  assignedTo: z.string().uuid("ID de usuario ejecutor inv?lido."),
-  reason: z.string().min(3, "El motivo de reasignaci?n es obligatorio.").max(500),
+  assignedTo: z.string().uuid("ID de usuario ejecutor inválido."),
+  reason: z.string().min(3, "El motivo de reasignación es obligatorio.").max(500),
 });
 
 export async function POST(
@@ -33,7 +33,7 @@ export async function POST(
   const csrfCheck = verifyCsrfOrigin(request);
   if (!csrfCheck.valid) {
     return NextResponse.json<ApiResponse<null>>(
-      { success: false, error: { code: "CSRF_ERROR", message: csrfCheck.reason || "Error de validaci?n CSRF" } },
+      { success: false, error: { code: "CSRF_ERROR", message: csrfCheck.reason || "Error de validación CSRF" } },
       { status: 403 }
     );
   }
@@ -50,7 +50,7 @@ export async function POST(
     body = await request.json();
   } catch {
     return NextResponse.json<ApiResponse<null>>(
-      { success: false, error: { code: "INVALID_JSON", message: "Cuerpo de solicitud inv?lido." } },
+      { success: false, error: { code: "INVALID_JSON", message: "Cuerpo de solicitud inválido." } },
       { status: 400 }
     );
   }
@@ -62,7 +62,7 @@ export async function POST(
         success: false,
         error: {
           code: "VALIDATION_ERROR",
-          message: "Datos de reasignaci?n inv?lidos.",
+          message: "Datos de reasignación inválidos.",
           details: { errors: parseResult.error.format() },
         },
       },

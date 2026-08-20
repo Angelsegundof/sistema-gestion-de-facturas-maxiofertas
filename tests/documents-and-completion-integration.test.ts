@@ -14,7 +14,7 @@ import {
 } from "../src/lib/services/invoice-documents";
 import { SanitizedUser } from "../src/domain/types";
 
-describe("Fase 7: R2, Documentos y Finalizaci?n de Factura (Integration)", () => {
+describe("Fase 7: R2, Documentos y Finalización de Factura (Integration)", () => {
   let pg: PGlite;
   let db: ReturnType<typeof drizzle<typeof schema>>;
 
@@ -124,7 +124,7 @@ describe("Fase 7: R2, Documentos y Finalizaci?n de Factura (Integration)", () =>
   });
 
   describe("1. Validaciones de Archivo PDF", () => {
-    it("Acepta archivo PDF con firma %PDF v?lida y tama?o <= 2MB", () => {
+    it("Acepta archivo PDF con firma %PDF válida y tamaño <= 2MB", () => {
       const buf = createValidPdfBuffer("Factura 101");
       const res = validatePdfBuffer(buf, buf.length, "application/pdf");
       expect(res.valid).toBe(true);
@@ -134,7 +134,7 @@ describe("Fase 7: R2, Documentos y Finalizaci?n de Factura (Integration)", () =>
       const textBuf = Buffer.from("<html><body>Not a PDF</body></html>", "utf-8");
       const res = validatePdfBuffer(textBuf, textBuf.length, "application/pdf");
       expect(res.valid).toBe(false);
-      expect(res.reason).toContain("firma v?lida de documento PDF");
+      expect(res.reason).toContain("firma válida de documento PDF");
     });
 
     it("Rechaza archivo mayor a 2 MB", () => {
@@ -146,14 +146,14 @@ describe("Fase 7: R2, Documentos y Finalizaci?n de Factura (Integration)", () =>
       buf[3] = 0x46; // %PDF
       const res = validatePdfBuffer(buf, oversize, "application/pdf");
       expect(res.valid).toBe(false);
-      expect(res.reason).toContain("supera el tama?o m?ximo permitido de 2 MB");
+      expect(res.reason).toContain("supera el tamaño máximo permitido de 2 MB");
     });
 
     it("Rechaza archivo vac?o", () => {
       const emptyBuf = Buffer.alloc(0);
       const res = validatePdfBuffer(emptyBuf, 0, "application/pdf");
       expect(res.valid).toBe(false);
-      expect(res.reason).toContain("est? vac?o");
+      expect(res.reason).toContain("está vac?o");
     });
 
     it("Genera storage key determin?stica e inmune a path traversal", () => {
@@ -294,7 +294,7 @@ describe("Fase 7: R2, Documentos y Finalizaci?n de Factura (Integration)", () =>
     });
   });
 
-  describe("3. Finalizaci?n de Factura y Reglas de Negocio", () => {
+  describe("3. Finalización de Factura y Reglas de Negocio", () => {
     it("Permite finalizar factura con MATCH y PDF cargado", async () => {
       await pg.exec(`
         INSERT INTO invoice_requests (
@@ -457,7 +457,7 @@ describe("Fase 7: R2, Documentos y Finalizaci?n de Factura (Integration)", () =>
       ).rejects.toThrow("FORBIDDEN: No tienes permisos para finalizar facturas.");
     });
 
-    it("Garantiza idempotencia en doble finalizaci?n sin duplicar registros", async () => {
+    it("Garantiza idempotencia en doble finalización sin duplicar registros", async () => {
       await pg.exec(`
         INSERT INTO invoice_requests (
           id, request_number, warehouse_id, customer_id, requested_by, assigned_to,

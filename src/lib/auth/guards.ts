@@ -14,7 +14,7 @@ export class AuthError extends Error {
 }
 
 export class UnauthorizedError extends AuthError {
-  constructor(message = "Debes iniciar sesi?n para acceder a este recurso") {
+  constructor(message = "Debes iniciar sesión para acceder a este recurso") {
     super("UNAUTHORIZED", message, 401);
   }
 }

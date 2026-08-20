@@ -8,8 +8,8 @@ import { ReconciliationResult } from "@/domain/pricing";
 
 const reconcileSchema = z.object({
   siiGrossTotal: z
-    .number({ message: "El total del SII debe ser un n?mero." })
-    .int("El total del SII debe ser un n?mero entero.")
+    .number({ message: "El total del SII debe ser un número." })
+    .int("El total del SII debe ser un número entero.")
     .positive("El total del SII debe ser mayor a 0."),
 });
 
@@ -36,7 +36,7 @@ export async function POST(
   const csrfCheck = verifyCsrfOrigin(request);
   if (!csrfCheck.valid) {
     return NextResponse.json<ApiResponse<null>>(
-      { success: false, error: { code: "CSRF_ERROR", message: csrfCheck.reason || "Error de validaci?n CSRF" } },
+      { success: false, error: { code: "CSRF_ERROR", message: csrfCheck.reason || "Error de validación CSRF" } },
       { status: 403 }
     );
   }
@@ -53,7 +53,7 @@ export async function POST(
     body = await request.json();
   } catch {
     return NextResponse.json<ApiResponse<null>>(
-      { success: false, error: { code: "INVALID_JSON", message: "Cuerpo de solicitud inv?lido." } },
+      { success: false, error: { code: "INVALID_JSON", message: "Cuerpo de solicitud inválido." } },
       { status: 400 }
     );
   }
@@ -65,7 +65,7 @@ export async function POST(
         success: false,
         error: {
           code: "VALIDATION_ERROR",
-          message: "El monto ingresado para el SII es inv?lido.",
+          message: "El monto ingresado para el SII es inválido.",
           details: { errors: parseResult.error.format() },
         },
       },

@@ -26,7 +26,7 @@ export async function PATCH(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
-  // 1. Verificaci?n CSRF / Same-Origin
+  // 1. Verificación CSRF / Same-Origin
   const csrfCheck = verifyCsrfOrigin(request);
   if (!csrfCheck.valid) {
     return NextResponse.json<ApiResponse<null>>(
@@ -34,7 +34,7 @@ export async function PATCH(
         success: false,
         error: {
           code: "CSRF_FORBIDDEN",
-          message: csrfCheck.reason || "Petici?n no permitida por pol?tica de origen.",
+          message: csrfCheck.reason || "Petición no permitida por política de origen.",
         },
       },
       { status: 403 }
@@ -65,7 +65,7 @@ export async function PATCH(
     body = await request.json();
   } catch {
     return NextResponse.json<ApiResponse<null>>(
-      { success: false, error: { code: "INVALID_BODY", message: "Cuerpo de solicitud inv?lido" } },
+      { success: false, error: { code: "INVALID_BODY", message: "Cuerpo de solicitud inválido" } },
       { status: 400 }
     );
   }
@@ -77,7 +77,7 @@ export async function PATCH(
         success: false,
         error: {
           code: "VALIDATION_ERROR",
-          message: "Datos de actualizaci?n inv?lidos.",
+          message: "Datos de actualización inválidos.",
           details: parsed.error.flatten().fieldErrors,
         },
       },
@@ -93,7 +93,7 @@ export async function PATCH(
           success: false,
           error: {
             code: "WEAK_PASSWORD",
-            message: passCheck.message || "La contrase?a no cumple con las pol?ticas de seguridad.",
+            message: passCheck.message || "La contraseña no cumple con las políticas de seguridad.",
           },
         },
         { status: 400 }
@@ -152,7 +152,7 @@ export async function PATCH(
 
   const updatedUser = updatedList[0];
 
-  // Si el usuario fue deshabilitado, cambi? su rol o cambi? su contrase?a:
+  // Si el usuario fue deshabilitado, cambió su rol o cambió su contraseña:
   // Revocar todas sus sesiones activas inmediatamente
   const shouldRevokeSessions =
     (parsed.data.active !== undefined && !parsed.data.active) ||
@@ -163,7 +163,7 @@ export async function PATCH(
     await revokeAllUserSessions(id);
   }
 
-  // Registrar auditor?a
+  // Registrar auditoría
   if (parsed.data.active !== undefined && parsed.data.active !== targetUser.active) {
     await logAuditEvent({
       userId: currentUser.id,

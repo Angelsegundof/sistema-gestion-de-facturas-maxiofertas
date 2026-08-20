@@ -72,7 +72,7 @@ export default function SolicitarFacturaPage() {
     }
 
     if (!validateRut(trimmed)) {
-      setRutError("Revisa el RUT. Parece estar incompleto o ser inv?lido.");
+      setRutError("Revisa el RUT. Parece estar incompleto o ser inválido.");
       setCustomerLookupStatus("idle");
       return;
     }
@@ -136,11 +136,11 @@ export default function SolicitarFacturaPage() {
   const handleSubmit = async (override = false) => {
     setFormError(null);
     if (!validateRut(rut)) {
-      setRutError("Ingresa un RUT v?lido para continuar.");
+      setRutError("Ingresa un RUT válido para continuar.");
       return;
     }
     if (!legalName.trim()) {
-      setFormError("La raz?n social del cliente es obligatoria.");
+      setFormError("La razón social del cliente es obligatoria.");
       return;
     }
     if (!businessActivity.trim()) {
@@ -148,7 +148,7 @@ export default function SolicitarFacturaPage() {
       return;
     }
     if (items.some((i) => !i.description.trim() || i.quantity <= 0 || i.unitPriceGross <= 0)) {
-      setFormError("Todos los productos deben tener descripci?n, cantidad (>0) y precio (>0).");
+      setFormError("Todos los productos deben tener descripción, cantidad (>0) y precio (>0).");
       return;
     }
 
@@ -192,7 +192,7 @@ export default function SolicitarFacturaPage() {
         setConfirmedRequest(data.data.request);
         setDuplicateCandidate(null);
       } else {
-        setFormError(data.error?.message || "Ocurri? un error al enviar la solicitud.");
+        setFormError(data.error?.message || "Ocurrió un error al enviar la solicitud.");
       }
     } catch {
       setFormError("Error de conexi?n con el servidor. Intenta nuevamente.");
@@ -221,12 +221,12 @@ export default function SolicitarFacturaPage() {
               </svg>
             </div>
             <h1 className="text-2xl font-bold text-slate-900">Solicitud enviada</h1>
-            <p className="text-sm text-slate-600 mt-1">La solicitud qued? pendiente de facturaci?n.</p>
+            <p className="text-sm text-slate-600 mt-1">La solicitud qued? pendiente de facturación.</p>
           </div>
 
           <div className="bg-slate-50 rounded-lg p-5 border border-slate-200 space-y-3 mb-6">
             <div className="flex justify-between items-center text-sm">
-              <span className="text-slate-500">N?mero de solicitud:</span>
+              <span className="text-slate-500">Número de solicitud:</span>
               <span className="font-mono font-bold text-slate-900 text-base">{confirmedRequest.requestNumber}</span>
             </div>
             <div className="flex justify-between items-center text-sm">
@@ -315,7 +315,7 @@ export default function SolicitarFacturaPage() {
 
                 <div className="bg-white rounded-lg p-3 border border-amber-200 mt-2 space-y-1 text-xs">
                   <p>
-                    <strong className="text-slate-700">N?mero:</strong> {duplicateCandidate.requestNumber}
+                    <strong className="text-slate-700">Número:</strong> {duplicateCandidate.requestNumber}
                   </p>
                   <p>
                     <strong className="text-slate-700">Cliente:</strong> {duplicateCandidate.customerLegalName}
@@ -403,7 +403,7 @@ export default function SolicitarFacturaPage() {
 
               <div>
                 <label htmlFor="legalName" className="block text-xs font-semibold text-slate-700 mb-1">
-                  Raz?n social *
+                  Razón social *
                 </label>
                 <input
                   id="legalName"
@@ -434,7 +434,7 @@ export default function SolicitarFacturaPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label htmlFor="phone" className="block text-xs font-semibold text-slate-700 mb-1">
-                    Tel?fono (opcional)
+                    Teléfono (opcional)
                   </label>
                   <input
                     id="phone"
@@ -447,7 +447,7 @@ export default function SolicitarFacturaPage() {
                 </div>
                 <div>
                   <label htmlFor="email" className="block text-xs font-semibold text-slate-700 mb-1">
-                    Correo electr?nico (opcional)
+                    Correo electrónico (opcional)
                   </label>
                   <input
                     id="email"
@@ -495,7 +495,7 @@ export default function SolicitarFacturaPage() {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">Descripci?n del producto *</label>
+                      <label className="block text-xs font-medium text-slate-700 mb-1">Descripción del producto *</label>
                       <input
                         type="text"
                         value={item.description}
@@ -578,7 +578,7 @@ export default function SolicitarFacturaPage() {
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 maxLength={2000}
-                placeholder="Indica informaci?n adicional sobre la entrega o requerimientos especiales..."
+                placeholder="Indica información adicional sobre la entrega o requerimientos especiales..."
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
               />
               <span className="text-xs text-slate-400 float-right">{notes.length}/2000</span>

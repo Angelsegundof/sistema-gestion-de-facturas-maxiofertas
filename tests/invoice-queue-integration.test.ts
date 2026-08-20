@@ -374,7 +374,7 @@ describe("Invoice Queue & Worktable Domain Integration Tests (Real PostgreSQL)",
       .values({
         invoiceRequestId: req.id,
         reason: "INVALID_RUT",
-        comment: "El RUT ingresado tiene d?gito verificador err?neo.",
+        comment: "El RUT ingresado tiene d?gito verificador erróneo.",
         requestedBy: executorA.id,
       })
       .returning();
@@ -420,7 +420,7 @@ describe("Invoice Queue & Worktable Domain Integration Tests (Real PostgreSQL)",
         requestedBy: warehouseUser.id,
         status: "NEEDS_CORRECTION",
         customerRutSnapshot: "76.432.109-K",
-        customerLegalNameSnapshot: "Nombre Antiguo Err?neo",
+        customerLegalNameSnapshot: "Nombre Antiguo Erróneo",
         customerBusinessActivitySnapshot: "Giro Antiguo",
         expectedGrossTotal: 28000,
       })

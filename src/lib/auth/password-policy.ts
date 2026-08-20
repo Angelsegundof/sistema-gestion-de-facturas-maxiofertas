@@ -18,27 +18,27 @@ export interface PasswordValidationResult {
 
 export function validatePasswordPolicy(password: string): PasswordValidationResult {
   if (!password || typeof password !== "string") {
-    return { valid: false, message: "La contrase?a es requerida." };
+    return { valid: false, message: "La contraseña es requerida." };
   }
 
   if (password.length < 8) {
     return {
       valid: false,
-      message: "La contrase?a debe tener al menos 8 caracteres.",
+      message: "La contraseña debe tener al menos 8 caracteres.",
     };
   }
 
   if (password.length > 128) {
     return {
       valid: false,
-      message: "La contrase?a no debe exceder 128 caracteres.",
+      message: "La contraseña no debe exceder 128 caracteres.",
     };
   }
 
   if (TRIVIAL_PASSWORDS.has(password.toLowerCase())) {
     return {
       valid: false,
-      message: "La contrase?a elegida es demasiado predecible o trivial. Por favor utiliza una m?s segura.",
+      message: "La contraseña elegida es demasiado predecible o trivial. Por favor utiliza una m?s segura.",
     };
   }
 

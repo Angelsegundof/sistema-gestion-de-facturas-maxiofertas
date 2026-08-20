@@ -14,12 +14,12 @@ import {
 import { ApiResponse, SanitizedUser } from "@/types";
 
 const loginSchema = z.object({
-  email: z.string().email("Formato de correo inv?lido"),
-  password: z.string().min(1, "La contrase?a es requerida"),
+  email: z.string().email("Formato de correo inválido"),
+  password: z.string().min(1, "La contraseña es requerida"),
 });
 
 export async function POST(request: NextRequest) {
-  // 1. Verificaci?n CSRF / Same-Origin
+  // 1. Verificación CSRF / Same-Origin
   const csrfCheck = verifyCsrfOrigin(request);
   if (!csrfCheck.valid) {
     return NextResponse.json<ApiResponse<null>>(
@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
         success: false,
         error: {
           code: "CSRF_FORBIDDEN",
-          message: csrfCheck.reason || "Petici?n no permitida por pol?tica de origen.",
+          message: csrfCheck.reason || "Petición no permitida por política de origen.",
         },
       },
       { status: 403 }
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
         success: false,
         error: {
           code: "INVALID_BODY",
-          message: "Formato de solicitud no v?lido.",
+          message: "Formato de solicitud no válido.",
         },
       },
       { status: 400 }
@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
         success: false,
         error: {
           code: "VALIDATION_ERROR",
-          message: "Datos de inicio de sesi?n incompletos o inv?lidos.",
+          message: "Datos de inicio de sesión incompletos o inválidos.",
         },
       },
       { status: 400 }
@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
         success: false,
         error: {
           code: "SERVICE_UNAVAILABLE",
-          message: "Servicio de autenticaci?n no disponible.",
+          message: "Servicio de autenticación no disponible.",
         },
       },
       { status: 503 }
@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
 
   const genericAuthError = {
     code: "INVALID_CREDENTIALS",
-    message: "Credenciales de acceso inv?lidas o usuario no autorizado.",
+    message: "Credenciales de acceso inválidas o usuario no autorizado.",
   };
 
   if (userList.length === 0) {
@@ -127,7 +127,7 @@ export async function POST(request: NextRequest) {
 
   const user = userList[0];
 
-  // 5. Verificar si el usuario est? activo
+  // 5. Verificar si el usuario está activo
   if (!user.active) {
     await authRateLimiter.recordAttempt(`ip:${ipAddress}`);
     await logAuditEvent({
@@ -144,7 +144,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // 6. Verificar contrase?a
+  // 6. Verificar contraseña
   const isPasswordValid = await verifyPassword(parsed.data.password, user.passwordHash);
   if (!isPasswordValid) {
     await authRateLimiter.recordAttempt(`ip:${ipAddress}`);
@@ -162,10 +162,10 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // 7. Resetear rate limiter al tener ?xito
+  // 7. Resetear rate limiter al tener éxito
   await authRateLimiter.reset(`ip:${ipAddress}`);
 
-  // 8. Crear sesi?n
+  // 8. Crear sesión
   const sessionToken = await createSession(user.id, ipAddress, userAgent);
 
   await logAuditEvent({

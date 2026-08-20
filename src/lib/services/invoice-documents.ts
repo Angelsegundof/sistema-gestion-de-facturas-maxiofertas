@@ -21,7 +21,7 @@ import { sanitizeQueueInvoiceRequest } from "./invoice-queue";
 export const MAX_PDF_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB
 
 /**
- * Valida un archivo PDF en el servidor comprobando tama?o y Magic Bytes (%PDF-).
+ * Valida un archivo PDF en el servidor comprobando tamaño y Magic Bytes (%PDF-).
  */
 export function validatePdfBuffer(
   buffer: Uint8Array | Buffer,
@@ -29,13 +29,13 @@ export function validatePdfBuffer(
   mimeType: string
 ): { valid: boolean; reason?: string } {
   if (!buffer || buffer.length === 0 || fileSize <= 0) {
-    return { valid: false, reason: "El archivo est? vac?o." };
+    return { valid: false, reason: "El archivo está vac?o." };
   }
 
   if (fileSize > MAX_PDF_SIZE_BYTES || buffer.length > MAX_PDF_SIZE_BYTES) {
     return {
       valid: false,
-      reason: `El archivo supera el tama?o m?ximo permitido de 2 MB (${(fileSize / (1024 * 1024)).toFixed(2)} MB).`,
+      reason: `El archivo supera el tamaño máximo permitido de 2 MB (${(fileSize / (1024 * 1024)).toFixed(2)} MB).`,
     };
   }
 
@@ -49,7 +49,7 @@ export function validatePdfBuffer(
   ) {
     return {
       valid: false,
-      reason: "El archivo no tiene una firma v?lida de documento PDF (%PDF).",
+      reason: "El archivo no tiene una firma válida de documento PDF (%PDF).",
     };
   }
 

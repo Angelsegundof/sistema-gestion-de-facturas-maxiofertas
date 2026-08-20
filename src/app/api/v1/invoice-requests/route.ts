@@ -21,16 +21,16 @@ import { ApiResponse, SanitizedInvoiceRequest, QueueSummaryCounters } from "@/ty
 const createInvoiceRequestSchema = z.object({
   customer: z.object({
     rut: z.string().min(1, "El RUT es requerido"),
-    legalName: z.string().min(2, "La raz?n social debe tener al menos 2 caracteres").max(200),
+    legalName: z.string().min(2, "La razón social debe tener al menos 2 caracteres").max(200),
     businessActivity: z.string().min(2, "El giro debe tener al menos 2 caracteres").max(250),
     phone: z.string().max(50).nullable().optional(),
-    email: z.string().email("Correo con formato inv?lido").max(320).nullable().optional(),
+    email: z.string().email("Correo con formato inválido").max(320).nullable().optional(),
   }),
   warehouseId: z.string().uuid().nullable().optional(),
   items: z
     .array(
       z.object({
-        description: z.string().min(1, "La descripci?n del producto es requerida").max(500),
+        description: z.string().min(1, "La descripción del producto es requerida").max(500),
         quantity: z.number().int("La cantidad debe ser un entero").positive("La cantidad debe ser mayor a 0"),
         unitPriceGross: z
           .number()
@@ -45,7 +45,7 @@ const createInvoiceRequestSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
-  // 1. Verificaci?n CSRF / Same-Origin
+  // 1. Verificación CSRF / Same-Origin
   const csrfCheck = verifyCsrfOrigin(request);
   if (!csrfCheck.valid) {
     return NextResponse.json<ApiResponse<null>>(
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
         success: false,
         error: {
           code: "CSRF_FORBIDDEN",
-          message: csrfCheck.reason || "Petici?n no permitida por pol?tica de origen.",
+          message: csrfCheck.reason || "Petición no permitida por política de origen.",
         },
       },
       { status: 403 }
@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
     body = await request.json();
   } catch {
     return NextResponse.json<ApiResponse<null>>(
-      { success: false, error: { code: "INVALID_BODY", message: "Cuerpo de solicitud JSON inv?lido" } },
+      { success: false, error: { code: "INVALID_BODY", message: "Cuerpo de solicitud JSON inválido" } },
       { status: 400 }
     );
   }
@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
         success: false,
         error: {
           code: "VALIDATION_ERROR",
-          message: "Los datos de la solicitud son incompletos o inv?lidos.",
+          message: "Los datos de la solicitud son incompletos o inválidos.",
           details: parsed.error.flatten().fieldErrors,
         },
       },

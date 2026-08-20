@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
         success: false,
         error: {
           code: "CSRF_FORBIDDEN",
-          message: csrfCheck.reason || "Petici?n no permitida por pol?tica de origen.",
+          message: csrfCheck.reason || "Petición no permitida por política de origen.",
         },
       },
       { status: 403 }
@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
     {
       success: true,
       data: {
-        message: "Sesi?n finalizada exitosamente.",
+        message: "Sesión finalizada exitosamente.",
       },
     },
     { status: 200 }

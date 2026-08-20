@@ -71,7 +71,7 @@ export interface RequestTotals {
 }
 
 /**
- * Calcula los totales de una l?nea de producto.
+ * Calcula los totales de una línea de producto.
  */
 export function calculateLineItem(
   item: { description: string; quantity: number; unitPriceGross: number },
@@ -79,13 +79,13 @@ export function calculateLineItem(
   vatRatePercent: number = DEFAULT_VAT_RATE_PERCENT
 ): CalculatedItem {
   if (!item.description || item.description.trim().length === 0) {
-    throw new Error(`La descripci?n del producto en la l?nea ${lineNumber} es requerida.`);
+    throw new Error(`La descripción del producto en la línea ${lineNumber} es requerida.`);
   }
   if (item.quantity <= 0 || !Number.isInteger(item.quantity)) {
-    throw new Error(`La cantidad en la l?nea ${lineNumber} debe ser un entero positivo.`);
+    throw new Error(`La cantidad en la línea ${lineNumber} debe ser un entero positivo.`);
   }
   if (item.unitPriceGross <= 0 || !Number.isInteger(item.unitPriceGross)) {
-    throw new Error(`El precio bruto en la l?nea ${lineNumber} debe ser un entero positivo.`);
+    throw new Error(`El precio bruto en la línea ${lineNumber} debe ser un entero positivo.`);
   }
 
   const unitPriceGross = item.unitPriceGross;
@@ -106,7 +106,7 @@ export function calculateLineItem(
 }
 
 /**
- * Calcula y valida todos los totales de una solicitud a partir de sus l?neas.
+ * Calcula y valida todos los totales de una solicitud a partir de sus líneas.
  * El servidor siempre recalcula los valores sin confiar en totales enviados por cliente.
  */
 export function calculateRequestTotals(
@@ -117,7 +117,7 @@ export function calculateRequestTotals(
     throw new Error("La solicitud debe contener al menos un producto.");
   }
   if (rawItems.length > 100) {
-    throw new Error("La solicitud no puede superar las 100 l?neas de productos.");
+    throw new Error("La solicitud no puede superar las 100 líneas de productos.");
   }
 
   const calculatedItems: CalculatedItem[] = [];
