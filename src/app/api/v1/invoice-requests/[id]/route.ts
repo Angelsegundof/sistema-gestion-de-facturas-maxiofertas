@@ -6,12 +6,14 @@ import {
   invoiceRequestItems,
   requestCorrections,
   documents,
+  rectifications,
   warehouses,
   users,
 } from "@/lib/db/schema";
 import { requireAuth, AuthError } from "@/lib/auth";
 import { sanitizeQueueInvoiceRequest } from "@/lib/services/invoice-queue";
 import { sanitizeDocument } from "@/lib/services/invoice-documents";
+import { sanitizeRectification } from "@/lib/services/rectifications";
 import { r2Client } from "@/lib/r2/client";
 import { ApiResponse, SanitizedInvoiceRequest } from "@/types";
 
@@ -144,7 +146,7 @@ export async function GET(
     }));
   }
 
-  // Populate attached invoice document if present
+  // Populate attached invoice document if present (prioritize latest valid/replacement document)
   const docList = await db
     .select()
     .from(documents)
@@ -154,14 +156,30 @@ export async function GET(
         eq(documents.documentType, "INVOICE")
       )
     )
-    .limit(1);
+    .orderBy(desc(documents.createdAt));
 
   if (docList.length > 0) {
+    const activeDoc = docList.find((d) => !d.isVoided) || docList[0];
     const accessUrl = await r2Client.generatePresignedDownloadUrl({
-      key: docList[0].storageKey,
+      key: activeDoc.storageKey,
       expiresInSeconds: 900,
     });
-    sanitized.document = sanitizeDocument(docList[0], accessUrl);
+    sanitized.document = sanitizeDocument(activeDoc, accessUrl);
+  }
+
+  // Populate rectifications if any
+  const rectsList = await db
+    .select()
+    .from(rectifications)
+    .where(eq(rectifications.invoiceRequestId, targetReq.id))
+    .orderBy(desc(rectifications.requestedAt));
+
+  if (rectsList.length > 0) {
+    sanitized.rectifications = rectsList.map((r) => sanitizeRectification(r));
+    const active = rectsList.find((r) =>
+      ["REQUESTED", "IN_PROGRESS", "CREDIT_NOTE_REGISTERED", "NEW_INVOICE_PENDING"].includes(r.status)
+    );
+    sanitized.activeRectification = active ? sanitizeRectification(active) : null;
   }
 
   return NextResponse.json<ApiResponse<{ request: SanitizedInvoiceRequest }>>(

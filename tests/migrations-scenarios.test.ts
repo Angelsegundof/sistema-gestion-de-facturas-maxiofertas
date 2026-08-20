@@ -37,17 +37,24 @@ describe("PostgreSQL Migrations Scenarios (Real PostgreSQL)", () => {
       await db.exec(st);
     }
 
+    const m5 = readMigration("0005_uneven_lady_bullseye.sql");
+    for (const st of m5.split("--> statement-breakpoint").filter((s) => s.trim())) {
+      await db.exec(st);
+    }
+
     const tablesRes = await db.query<{ table_name: string }>(
       "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name;"
     );
     const tables = tablesRes.rows.map((r) => r.table_name);
 
     expect(tables).toContain("audit_logs");
+    expect(tables).toContain("credit_notes");
     expect(tables).toContain("customers");
     expect(tables).toContain("documents");
     expect(tables).toContain("invoice_request_items");
     expect(tables).toContain("invoice_requests");
     expect(tables).toContain("rate_limits");
+    expect(tables).toContain("rectifications");
     expect(tables).toContain("request_corrections");
     expect(tables).toContain("sessions");
     expect(tables).toContain("users");

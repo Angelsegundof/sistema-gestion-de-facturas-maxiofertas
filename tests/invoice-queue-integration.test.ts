@@ -35,6 +35,8 @@ describe("Invoice Queue & Worktable Domain Integration Tests (Real PostgreSQL)",
       "0001_sharp_reptil.sql",
       "0002_concerned_molly_hayes.sql",
       "0003_rapid_boomerang.sql",
+      "0004_wet_mulholland_black.sql",
+      "0005_uneven_lady_bullseye.sql",
     ];
 
     for (const file of migrations) {

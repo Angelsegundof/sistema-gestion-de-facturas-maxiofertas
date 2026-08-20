@@ -79,13 +79,14 @@ describe("Fase 7: R2, Documentos y Finalizaci?n de Factura (Integration)", () =>
     pg = new PGlite();
     db = drizzle(pg, { schema });
 
-    // Apply all 5 migrations in order (0000 -> 0001 -> 0002 -> 0003 -> 0004)
+    // Apply all migrations in order
     const migrations = [
       "0000_cheerful_giant_girl.sql",
       "0001_sharp_reptil.sql",
       "0002_concerned_molly_hayes.sql",
       "0003_rapid_boomerang.sql",
       "0004_wet_mulholland_black.sql",
+      "0005_uneven_lady_bullseye.sql",
     ];
 
     for (const mFile of migrations) {

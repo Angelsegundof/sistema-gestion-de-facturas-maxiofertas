@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
@@ -7,10 +7,23 @@ import { formatCLP } from "@/domain/pricing";
 import {
   SanitizedUser,
   SanitizedInvoiceRequest,
+  SanitizedRectification,
   QueueSummaryCounters,
   InvoiceRequestStatus,
   AgeCategory,
+  RectificationReason,
 } from "@/domain/types";
+
+const REASON_LABELS: Record<RectificationReason, string> = {
+  RUT: "RUT",
+  LEGAL_NAME: "Razón Social",
+  BUSINESS_ACTIVITY: "Giro",
+  PRODUCT: "Producto",
+  QUANTITY: "Cantidad",
+  PRICE: "Precio",
+  TOTAL: "Total",
+  OTHER: "Otro",
+};
 
 export default function GestionFacturacionPage() {
   const router = useRouter();
@@ -18,8 +31,9 @@ export default function GestionFacturacionPage() {
   const [loadingUser, setLoadingUser] = useState(true);
 
   // Queue state
-  const [activeTab, setActiveTab] = useState<InvoiceRequestStatus>("PENDING");
+  const [activeTab, setActiveTab] = useState<InvoiceRequestStatus | "RECTIFICATIONS">("PENDING");
   const [requests, setRequests] = useState<SanitizedInvoiceRequest[]>([]);
+  const [rectifications, setRectifications] = useState<SanitizedRectification[]>([]);
   const [counters, setCounters] = useState<QueueSummaryCounters>({
     pendingCount: 0,
     inProgressCount: 0,
@@ -71,20 +85,38 @@ export default function GestionFacturacionPage() {
 
     async function loadQueue() {
       try {
+        setLoadingQueue(true);
         const searchParam = searchTerm.trim() ? `&search=${encodeURIComponent(searchTerm.trim())}` : "";
-        const res = await fetch(
-          `/api/v1/invoice-requests?status=${activeTab}&counters=true${searchParam}`
-        );
-        const data = await res.json();
-        if (!isMounted) return;
-        if (data.success && data.data) {
-          setRequests(data.data.requests || []);
-          if (data.data.counters) {
-            setCounters(data.data.counters);
+
+        if (activeTab === "RECTIFICATIONS") {
+          const res = await fetch(`/api/v1/rectifications?page=1&pageSize=50${searchParam}`);
+          const data = await res.json();
+          if (!isMounted) return;
+          if (data.success && data.data) {
+            setRectifications(data.data.rectifications || []);
+          }
+
+          // Fetch counters in parallel
+          const countersRes = await fetch(`/api/v1/invoice-requests?status=PENDING&counters=true`);
+          const countersData = await countersRes.json();
+          if (isMounted && countersData.success && countersData.data?.counters) {
+            setCounters(countersData.data.counters);
+          }
+        } else {
+          const res = await fetch(
+            `/api/v1/invoice-requests?status=${activeTab}&counters=true${searchParam}`
+          );
+          const data = await res.json();
+          if (!isMounted) return;
+          if (data.success && data.data) {
+            setRequests(data.data.requests || []);
+            if (data.data.counters) {
+              setCounters(data.data.counters);
+            }
           }
         }
       } catch {
-        if (isMounted) setActionError("Error al cargar la cola de facturaci?n.");
+        if (isMounted) setActionError("Error al cargar la cola de facturación.");
       } finally {
         if (isMounted) setLoadingQueue(false);
       }
@@ -98,109 +130,147 @@ export default function GestionFacturacionPage() {
 
   const refreshQueue = async () => {
     setLoadingQueue(true);
-    setActionError(null);
     try {
       const searchParam = searchTerm.trim() ? `&search=${encodeURIComponent(searchTerm.trim())}` : "";
-      const res = await fetch(
-        `/api/v1/invoice-requests?status=${activeTab}&counters=true${searchParam}`
-      );
-      const data = await res.json();
-      if (data.success && data.data) {
-        setRequests(data.data.requests || []);
-        if (data.data.counters) {
-          setCounters(data.data.counters);
+      if (activeTab === "RECTIFICATIONS") {
+        const res = await fetch(`/api/v1/rectifications?page=1&pageSize=50${searchParam}`);
+        const data = await res.json();
+        if (data.success && data.data) {
+          setRectifications(data.data.rectifications || []);
+        }
+      } else {
+        const res = await fetch(
+          `/api/v1/invoice-requests?status=${activeTab}&counters=true${searchParam}`
+        );
+        const data = await res.json();
+        if (data.success && data.data) {
+          setRequests(data.data.requests || []);
+          if (data.data.counters) {
+            setCounters(data.data.counters);
+          }
         }
       }
     } catch {
-      setActionError("Error al refrescar la cola de facturaci?n.");
+      setActionError("Error al actualizar la cola.");
     } finally {
       setLoadingQueue(false);
     }
   };
 
-  // Claim handler (Tomar solicitud)
-  const handleClaim = async (requestId: string) => {
+  // Claim invoice request handler
+  const handleClaimRequest = async (requestId: string) => {
     setClaimingId(requestId);
     setActionError(null);
     try {
       const res = await fetch(`/api/v1/invoice-requests/${requestId}/claim`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
       });
       const data = await res.json();
-
-      if (res.ok && data.success) {
+      if (data.success && data.data?.request) {
         router.push(`/gestion/${requestId}`);
       } else {
-        setActionError(data.error?.message || "Esta solicitud ya est? siendo gestionada por otro usuario.");
-        refreshQueue();
+        setActionError(data.error?.message || "No fue posible tomar la solicitud.");
+        await refreshQueue();
       }
     } catch {
-      setActionError("Error de comunicaci?n al tomar la solicitud.");
+      setActionError("Error de conexión al intentar tomar la solicitud.");
     } finally {
       setClaimingId(null);
     }
   };
 
-  const renderAgeChip = (category?: AgeCategory, displayAge?: string) => {
-    if (!displayAge) return null;
-    let bg = "bg-slate-100 text-slate-700 border-slate-200";
-    if (category === "under_30m") bg = "bg-emerald-50 text-emerald-800 border-emerald-200 font-semibold";
-    if (category === "30_60m") bg = "bg-yellow-50 text-yellow-800 border-yellow-200 font-semibold";
-    if (category === "1_2h") bg = "bg-orange-50 text-orange-800 border-orange-200 font-semibold";
-    if (category === "over_2h") bg = "bg-rose-50 text-rose-800 border-rose-200 font-bold";
+  // Claim rectification handler
+  const handleClaimRectification = async (rectificationId: string) => {
+    setClaimingId(rectificationId);
+    setActionError(null);
+    try {
+      const res = await fetch(`/api/v1/rectifications/${rectificationId}/claim`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (data.success && data.data?.rectification) {
+        router.push(`/gestion/rectificaciones/${rectificationId}`);
+      } else {
+        setActionError(data.error?.message || "No fue posible tomar la corrección.");
+        await refreshQueue();
+      }
+    } catch {
+      setActionError("Error de conexión al intentar tomar la corrección.");
+    } finally {
+      setClaimingId(null);
+    }
+  };
 
-    return (
-      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs border ${bg}`}>
-        {displayAge}
-      </span>
-    );
+  // Take oldest request handler
+  const handleTakeOldest = () => {
+    if (requests.length > 0) {
+      handleClaimRequest(requests[0].id);
+    }
+  };
+
+  // Helper for Age pill styling
+  const getAgeBadgeStyle = (category?: AgeCategory) => {
+    switch (category) {
+      case "over_2h":
+        return "bg-rose-100 text-rose-800 border-rose-300";
+      case "1_2h":
+        return "bg-amber-100 text-amber-800 border-amber-300";
+      case "30_60m":
+        return "bg-yellow-100 text-yellow-800 border-yellow-300";
+      case "under_30m":
+      default:
+        return "bg-emerald-100 text-emerald-800 border-emerald-300";
+    }
   };
 
   if (loadingUser) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <p className="text-slate-600">Cargando...</p>
+        <div className="text-center space-y-3">
+          <div className="w-10 h-10 border-4 border-slate-300 border-t-slate-800 rounded-full animate-spin mx-auto" />
+          <p className="text-sm font-semibold text-slate-600">Cargando mesa de facturación...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 py-6 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-slate-50 text-slate-800 p-4 sm:p-8">
       <div className="max-w-7xl mx-auto space-y-6">
-        {/* Mobile notice */}
-        <div className="md:hidden bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800 flex items-center gap-2">
-          <span>?</span>
-          <span>La gesti?n de facturas est? optimizada para computador.</span>
-        </div>
-
-        {/* Header */}
-        <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-6 bg-white rounded-2xl border border-slate-200 shadow-sm">
+        {/* Top Header */}
+        <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
           <div>
-            <div className="flex items-center gap-2">
-              <Link href="/" className="text-xs text-blue-600 hover:underline">
-                ? Inicio
-              </Link>
-              <span className="text-xs text-slate-400">?</span>
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                M?dulo de Facturaci?n
-              </span>
-            </div>
-            <h1 className="text-2xl font-bold text-slate-900 mt-1">Gesti?n de Facturas</h1>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Cola operacional ordenada por antig?edad (m?s antigua primero).
+            <span className="text-xs font-bold text-blue-600 uppercase tracking-wider">
+              Mesa Operativa de Facturación
+            </span>
+            <h1 className="text-2xl font-black text-slate-900">Cola de Emisión y Rectificación</h1>
+            <p className="text-xs text-slate-500 mt-1">
+              Sesión activa: <span className="font-semibold text-slate-700">{currentUser?.name}</span> ({currentUser?.role})
             </p>
           </div>
-          <div className="text-right">
-            <span className="inline-block px-3 py-1 bg-blue-50 text-blue-700 text-xs font-bold rounded-full border border-blue-200">
-              {currentUser?.role === "ADMIN" ? "Administrador" : "Ejecutor de Facturaci?n"}
-            </span>
-            <p className="text-xs text-slate-500 mt-1">{currentUser?.name}</p>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={refreshQueue}
+              className="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition"
+            >
+              ↻ Actualizar
+            </button>
+
+            {activeTab === "PENDING" && requests.length > 0 && (
+              <button
+                onClick={handleTakeOldest}
+                disabled={!!claimingId}
+                className="py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold rounded-xl shadow-md transition disabled:opacity-50"
+              >
+                {claimingId ? "Tomando..." : "⚡ Tomar la más antigua"}
+              </button>
+            )}
           </div>
         </header>
 
         {/* Operational Counters */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           <div
             onClick={() => setActiveTab("PENDING")}
             className={`cursor-pointer p-4 rounded-xl border transition-all ${
@@ -233,8 +303,20 @@ export default function GestionFacturacionPage() {
                 : "bg-white border-slate-200 hover:border-slate-300 shadow-sm"
             }`}
           >
-            <p className="text-xs font-bold text-slate-500 uppercase">Necesitan correcci?n</p>
+            <p className="text-xs font-bold text-slate-500 uppercase">Corrección Previa</p>
             <p className="text-2xl font-extrabold text-rose-700 mt-1">{counters.needsCorrectionCount}</p>
+          </div>
+
+          <div
+            onClick={() => setActiveTab("RECTIFICATIONS")}
+            className={`cursor-pointer p-4 rounded-xl border transition-all ${
+              activeTab === "RECTIFICATIONS"
+                ? "bg-purple-50 border-purple-400 ring-2 ring-purple-400"
+                : "bg-white border-slate-200 hover:border-slate-300 shadow-sm"
+            }`}
+          >
+            <p className="text-xs font-bold text-purple-700 uppercase">Cambios solicitados</p>
+            <p className="text-2xl font-extrabold text-purple-800 mt-1">{counters.changesRequestedCount}</p>
           </div>
 
           <div
@@ -258,14 +340,14 @@ export default function GestionFacturacionPage() {
               onClick={() => setActionError(null)}
               className="text-xs font-bold text-rose-600 hover:underline"
             >
-              ? Cerrar
+              ✕ Cerrar
             </button>
           </div>
         )}
 
         {/* Search and Filter bar */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex gap-2 w-full sm:w-auto">
+          <div className="flex flex-wrap gap-2 w-full sm:w-auto">
             <button
               onClick={() => setActiveTab("PENDING")}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
@@ -290,7 +372,25 @@ export default function GestionFacturacionPage() {
                   : "bg-slate-100 text-slate-700 hover:bg-slate-200"
               }`}
             >
-              Necesitan correcci?n ({counters.needsCorrectionCount})
+              Correcciones ({counters.needsCorrectionCount})
+            </button>
+            <button
+              onClick={() => setActiveTab("RECTIFICATIONS")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                activeTab === "RECTIFICATIONS"
+                  ? "bg-purple-700 text-white"
+                  : "bg-purple-50 text-purple-800 hover:bg-purple-100"
+              }`}
+            >
+              Cambios solicitados ({counters.changesRequestedCount})
+            </button>
+            <button
+              onClick={() => setActiveTab("COMPLETED")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                activeTab === "COMPLETED" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+              }`}
+            >
+              Listas hoy ({counters.completedTodayCount})
             </button>
           </div>
 
@@ -299,96 +399,185 @@ export default function GestionFacturacionPage() {
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Buscar por n?mero, RUT o cliente..."
+              placeholder="Buscar por número, RUT o cliente..."
               className="w-full px-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
         </div>
 
-        {/* Work Queue Table */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-          {loadingQueue ? (
-            <div className="p-8 text-center text-sm text-slate-500">Cargando cola de solicitudes...</div>
-          ) : requests.length === 0 ? (
-            <div className="p-12 text-center text-slate-500">
-              <p className="text-base font-semibold">No hay solicitudes en esta secci?n.</p>
-              <p className="text-xs text-slate-400 mt-1">Las nuevas solicitudes aparecer?n autom?ticamente.</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 text-slate-500 border-b border-slate-200 uppercase font-semibold">
-                  <tr>
-                    <th className="py-3 px-4">Esperando</th>
-                    <th className="py-3 px-4">N?mero</th>
-                    <th className="py-3 px-4">Bodega</th>
-                    <th className="py-3 px-4">Cliente</th>
-                    <th className="py-3 px-4">RUT</th>
-                    <th className="py-3 px-4 text-right">Total a facturar</th>
-                    <th className="py-3 px-4">Solicitante</th>
-                    <th className="py-3 px-4 text-center">Acci?n</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200">
-                  {requests.map((r) => (
-                    <tr key={r.id} className="hover:bg-slate-50 transition">
-                      <td className="py-3 px-4 whitespace-nowrap">
-                        {renderAgeChip(r.age?.category, r.age?.displayAge)}
-                      </td>
-                      <td className="py-3 px-4 font-mono font-bold text-slate-900">{r.requestNumber}</td>
-                      <td className="py-3 px-4">
-                        <span className="font-medium text-slate-800">
-                          {r.warehouse?.name ? r.warehouse.name.replace("Bodega ", "") : "Central"}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 font-medium text-slate-900">{r.customerLegalNameSnapshot}</td>
-                      <td className="py-3 px-4 font-mono text-slate-600">{r.customerRutSnapshot}</td>
-                      <td className="py-3 px-4 text-right font-bold text-slate-900">
-                        {formatCLP(r.expectedGrossTotal)}
-                      </td>
-                      <td className="py-3 px-4 text-slate-600">{r.requesterName || "Solicitante"}</td>
-                      <td className="py-3 px-4 text-center whitespace-nowrap">
-                        {activeTab === "PENDING" && (
-                          <button
-                            onClick={() => handleClaim(r.id)}
-                            disabled={claimingId === r.id}
-                            className="py-1.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg shadow-sm transition disabled:opacity-50"
-                          >
-                            {claimingId === r.id ? "Tomando..." : "Tomar"}
-                          </button>
-                        )}
-                        {activeTab === "IN_PROGRESS" && (
-                          <Link
-                            href={`/gestion/${r.id}`}
-                            className="py-1.5 px-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-sm transition"
-                          >
-                            Abrir mesa
-                          </Link>
-                        )}
-                        {activeTab === "NEEDS_CORRECTION" && (
-                          <Link
-                            href={`/requests/${r.id}`}
-                            className="py-1.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg border border-slate-300 transition"
-                          >
-                            Ver detalle
-                          </Link>
-                        )}
-                        {activeTab === "COMPLETED" && (
-                          <Link
-                            href={`/requests/${r.id}`}
-                            className="py-1.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg border border-slate-300 transition"
-                          >
-                            Ver factura
-                          </Link>
-                        )}
-                      </td>
+        {/* RECTIFICATIONS TABLE VIEW */}
+        {activeTab === "RECTIFICATIONS" ? (
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            {loadingQueue ? (
+              <div className="p-8 text-center text-sm text-slate-500">Cargando solicitudes de cambio...</div>
+            ) : rectifications.length === 0 ? (
+              <div className="p-12 text-center text-slate-500">
+                <p className="text-base font-semibold">No hay facturas con cambios solicitados pendientes.</p>
+                <p className="text-xs text-slate-400 mt-1">
+                  Cuando una bodega solicite corregir una factura emitida, aparecerá aquí.
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-purple-50 text-purple-900 border-b border-purple-100 uppercase font-semibold">
+                    <tr>
+                      <th className="p-3.5">N° Solicitud</th>
+                      <th className="p-3.5">Motivo del Cambio</th>
+                      <th className="p-3.5">Comentario del Solicitante</th>
+                      <th className="p-3.5">Estado</th>
+                      <th className="p-3.5">Antigüedad</th>
+                      <th className="p-3.5 text-right">Acción</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {rectifications.map((r) => {
+                      const isAssigned = !!r.assignedTo;
+                      const isAssignedToMe = r.assignedTo === currentUser?.id || currentUser?.role === "ADMIN";
+
+                      return (
+                        <tr key={r.id} className="hover:bg-purple-50/30 transition">
+                          <td className="p-3.5 font-bold text-slate-900">
+                            {r.requestNumber || "FAC-XXXX"}
+                          </td>
+                          <td className="p-3.5">
+                            <span className="font-extrabold text-purple-700 bg-purple-100/80 px-2 py-0.5 rounded-md">
+                              {REASON_LABELS[r.reason] || r.reason}
+                            </span>
+                          </td>
+                          <td className="p-3.5 text-slate-600 max-w-xs truncate" title={r.comment || ""}>
+                            {r.comment || "Sin comentarios"}
+                          </td>
+                          <td className="p-3.5">
+                            <span className="text-xs font-bold px-2 py-1 bg-slate-100 text-slate-800 rounded-lg">
+                              {r.status}
+                            </span>
+                          </td>
+                          <td className="p-3.5">
+                            {r.age && (
+                              <span
+                                className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${getAgeBadgeStyle(
+                                  r.age.category
+                                )}`}
+                              >
+                                {r.age.displayAge}
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-3.5 text-right">
+                            {isAssigned ? (
+                              <Link
+                                href={`/gestion/rectificaciones/${r.id}`}
+                                className="inline-block py-1.5 px-3 bg-purple-700 hover:bg-purple-800 text-white font-bold rounded-lg transition text-xs"
+                              >
+                                {isAssignedToMe ? "Continuar corrección →" : "Ver detalle"}
+                              </Link>
+                            ) : (
+                              <button
+                                onClick={() => handleClaimRectification(r.id)}
+                                disabled={claimingId === r.id}
+                                className="py-1.5 px-3 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-lg transition disabled:opacity-50 text-xs"
+                              >
+                                {claimingId === r.id ? "Tomando..." : "Tomar corrección"}
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        ) : (
+          /* STANDARD REQUESTS TABLE */
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            {loadingQueue ? (
+              <div className="p-8 text-center text-sm text-slate-500">Cargando cola de solicitudes...</div>
+            ) : requests.length === 0 ? (
+              <div className="p-12 text-center text-slate-500">
+                <p className="text-base font-semibold">No hay solicitudes en esta sección.</p>
+                <p className="text-xs text-slate-400 mt-1">Las nuevas solicitudes aparecerán automáticamente.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 text-slate-500 border-b border-slate-200 uppercase font-semibold">
+                    <tr>
+                      <th className="p-3.5">N° Solicitud</th>
+                      <th className="p-3.5">Bodega</th>
+                      <th className="p-3.5">Cliente</th>
+                      <th className="p-3.5">Monto Total</th>
+                      <th className="p-3.5">Antigüedad</th>
+                      <th className="p-3.5 text-right">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {requests.map((r) => {
+                      const isAssigned = !!r.assignedTo;
+                      const isAssignedToMe = r.assignedTo === currentUser?.id || currentUser?.role === "ADMIN";
+
+                      return (
+                        <tr key={r.id} className="hover:bg-slate-50 transition">
+                          <td className="p-3.5 font-bold text-slate-900">
+                            {r.requestNumber}
+                            {r.duplicateWarning && (
+                              <span className="ml-1.5 text-[10px] font-extrabold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded border border-amber-300">
+                                ⚠ Duplicado
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-3.5 font-medium text-slate-700">{r.warehouse?.name || "—"}</td>
+                          <td className="p-3.5">
+                            <p className="font-semibold text-slate-900">{r.customerLegalNameSnapshot}</p>
+                            <p className="text-[11px] text-slate-500">{r.customerRutSnapshot}</p>
+                          </td>
+                          <td className="p-3.5 font-extrabold text-slate-900">
+                            {formatCLP(r.expectedGrossTotal)}
+                          </td>
+                          <td className="p-3.5">
+                            {r.age && (
+                              <span
+                                className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${getAgeBadgeStyle(
+                                  r.age.category
+                                )}`}
+                              >
+                                {r.age.displayAge}
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-3.5 text-right">
+                            {activeTab === "PENDING" ? (
+                              <button
+                                onClick={() => handleClaimRequest(r.id)}
+                                disabled={claimingId === r.id}
+                                className="py-1.5 px-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition disabled:opacity-50"
+                              >
+                                {claimingId === r.id ? "Tomando..." : "Tomar solicitud"}
+                              </button>
+                            ) : (
+                              <Link
+                                href={`/gestion/${r.id}`}
+                                className={`inline-block py-1.5 px-3 font-bold rounded-lg transition ${
+                                  isAssignedToMe
+                                    ? "bg-slate-900 hover:bg-slate-800 text-white"
+                                    : "bg-slate-100 hover:bg-slate-200 text-slate-700"
+                                }`}
+                              >
+                                {isAssignedToMe ? "Trabajar →" : "Ver detalle"}
+                              </Link>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

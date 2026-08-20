@@ -69,6 +69,30 @@ export const storageProvidersEnum = ["R2", "GOOGLE_DRIVE"] as const;
 
 export type StorageProvider = (typeof storageProvidersEnum)[number];
 
+export const rectificationStatuses = [
+  "REQUESTED",
+  "IN_PROGRESS",
+  "CREDIT_NOTE_REGISTERED",
+  "NEW_INVOICE_PENDING",
+  "COMPLETED",
+  "CANCELLED",
+] as const;
+
+export type RectificationStatus = (typeof rectificationStatuses)[number];
+
+export const rectificationReasons = [
+  "RUT",
+  "LEGAL_NAME",
+  "BUSINESS_ACTIVITY",
+  "PRODUCT",
+  "QUANTITY",
+  "PRICE",
+  "TOTAL",
+  "OTHER",
+] as const;
+
+export type RectificationReason = (typeof rectificationReasons)[number];
+
 export interface SanitizedDocument {
   id: string;
   documentType: DocumentType;
@@ -80,6 +104,9 @@ export interface SanitizedDocument {
   fileSize: number;
   invoiceRequestId: string | null;
   creditNoteId?: string | null;
+  isVoided?: boolean;
+  voidedAt?: string | null;
+  voidedByDocumentId?: string | null;
   uploadedBy: string;
   uploadedByName?: string;
   createdAt: string;
@@ -191,6 +218,75 @@ export interface SanitizedInvoiceRequest {
   items?: SanitizedInvoiceRequestItem[];
   corrections?: SanitizedRequestCorrection[];
   document?: SanitizedDocument | null;
+  rectifications?: SanitizedRectification[];
+  activeRectification?: SanitizedRectification | null;
+}
+
+export interface SanitizedCreditNote {
+  id: string;
+  rectificationId: string;
+  invoiceRequestId: string;
+  originalDocumentId: string;
+  siiFolio?: string | null;
+  issuedAt: string;
+  grossTotal: number;
+  netTotal?: number | null;
+  vatTotal?: number | null;
+  createdBy: string;
+  createdByName?: string;
+  createdAt: string;
+  document?: SanitizedDocument | null;
+}
+
+export interface SanitizedRectification {
+  id: string;
+  invoiceRequestId: string;
+  requestNumber?: string;
+  originalInvoiceDocumentId: string;
+  requestedBy: string;
+  requesterName?: string;
+  assignedTo: string | null;
+  assignedName?: string | null;
+  reason: RectificationReason;
+  comment: string | null;
+  status: RectificationStatus;
+  creditNoteId?: string | null;
+  creditNoteDocumentId?: string | null;
+  replacementInvoiceDocumentId?: string | null;
+  correctedCustomerSnapshot?: Record<string, unknown> | null;
+  correctedItemsSnapshot?: unknown[] | null;
+  siiGrossTotal?: number | null;
+  grossDifference?: number | null;
+  reconciliationStatus?: ReconciliationStatus | null;
+  requestedAt: string;
+  assignedAt?: string | null;
+  completedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  age?: AgeIndicator;
+  creditNote?: SanitizedCreditNote | null;
+  creditNoteDocument?: SanitizedDocument | null;
+  originalInvoiceDocument?: SanitizedDocument | null;
+  replacementInvoiceDocument?: SanitizedDocument | null;
+  invoiceRequest?: SanitizedInvoiceRequest | null;
+}
+
+export interface InvoiceTimelineEvent {
+  id: string;
+  type:
+    | "REQUEST_CREATED"
+    | "INVOICE_COMPLETED"
+    | "RECTIFICATION_REQUESTED"
+    | "CREDIT_NOTE_REGISTERED"
+    | "RECTIFICATION_COMPLETED";
+  title: string;
+  description?: string;
+  timestamp: string;
+  performedBy?: string;
+  documentId?: string;
+  documentFileName?: string;
+  documentAccessUrl?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface DuplicateCandidate {

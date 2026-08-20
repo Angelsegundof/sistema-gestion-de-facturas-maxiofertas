@@ -131,18 +131,24 @@ class CloudflareR2Client implements R2StorageAdapter {
     });
   }
 
-  async generatePresignedDownloadUrl(options: R2DownloadOptions): Promise<string> {
+  async generatePresignedDownloadUrl(
+    keyOrOptions: string | R2DownloadOptions,
+    expiresInSeconds: number = 900
+  ): Promise<string> {
+    const key = typeof keyOrOptions === "string" ? keyOrOptions : keyOrOptions.key;
+    const expires = typeof keyOrOptions === "string" ? expiresInSeconds : keyOrOptions.expiresInSeconds || 900;
+
     if (!this.client || !this.bucket) {
-      return `https://mock-r2.local/download/${encodeURIComponent(options.key)}?token=mock_download_token`;
+      return `https://mock-r2.local/download/${encodeURIComponent(key)}?token=mock_download_token`;
     }
 
     const command = new GetObjectCommand({
       Bucket: this.bucket,
-      Key: options.key,
+      Key: key,
     });
 
     return getSignedUrl(this.client, command, {
-      expiresIn: options.expiresInSeconds || 900, // default 15 minutes
+      expiresIn: expires,
     });
   }
 }

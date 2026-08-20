@@ -64,6 +64,30 @@ export const requestCorrectionReasons = [
 
 export type RequestCorrectionReason = (typeof requestCorrectionReasons)[number];
 
+export const rectificationStatuses = [
+  "REQUESTED",
+  "IN_PROGRESS",
+  "CREDIT_NOTE_REGISTERED",
+  "NEW_INVOICE_PENDING",
+  "COMPLETED",
+  "CANCELLED",
+] as const;
+
+export type RectificationStatus = (typeof rectificationStatuses)[number];
+
+export const rectificationReasons = [
+  "RUT",
+  "LEGAL_NAME",
+  "BUSINESS_ACTIVITY",
+  "PRODUCT",
+  "QUANTITY",
+  "PRICE",
+  "TOTAL",
+  "OTHER",
+] as const;
+
+export type RectificationReason = (typeof rectificationReasons)[number];
+
 export const documentTypesEnum = [
   "INVOICE",
   "CREDIT_NOTE",
@@ -229,6 +253,9 @@ export const documents = pgTable(
     fileSize: bigint("file_size", { mode: "number" }).notNull(),
     invoiceRequestId: uuid("invoice_request_id").references(() => invoiceRequests.id, { onDelete: "cascade" }),
     creditNoteId: uuid("credit_note_id"),
+    isVoided: boolean("is_voided").notNull().default(false),
+    voidedAt: timestamp("voided_at", { withTimezone: true }),
+    voidedByDocumentId: uuid("voided_by_document_id"),
     uploadedBy: uuid("uploaded_by")
       .notNull()
       .references(() => users.id),
@@ -237,6 +264,71 @@ export const documents = pgTable(
   (table) => [
     index("documents_invoice_request_id_idx").on(table.invoiceRequestId),
     index("documents_document_type_idx").on(table.documentType),
+  ]
+);
+
+export const creditNotes = pgTable(
+  "credit_notes",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    rectificationId: uuid("rectification_id").notNull(),
+    invoiceRequestId: uuid("invoice_request_id")
+      .notNull()
+      .references(() => invoiceRequests.id, { onDelete: "cascade" }),
+    originalDocumentId: uuid("original_document_id")
+      .notNull()
+      .references(() => documents.id),
+    siiFolio: varchar("sii_folio", { length: 100 }),
+    issuedAt: timestamp("issued_at", { withTimezone: true }).defaultNow().notNull(),
+    grossTotal: bigint("gross_total", { mode: "number" }).notNull(),
+    netTotal: bigint("net_total", { mode: "number" }),
+    vatTotal: bigint("vat_total", { mode: "number" }),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("credit_notes_invoice_request_id_idx").on(table.invoiceRequestId),
+    index("credit_notes_rectification_id_idx").on(table.rectificationId),
+  ]
+);
+
+export const rectifications = pgTable(
+  "rectifications",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    invoiceRequestId: uuid("invoice_request_id")
+      .notNull()
+      .references(() => invoiceRequests.id, { onDelete: "cascade" }),
+    originalInvoiceDocumentId: uuid("original_invoice_document_id")
+      .notNull()
+      .references(() => documents.id),
+    requestedBy: uuid("requested_by")
+      .notNull()
+      .references(() => users.id),
+    assignedTo: uuid("assigned_to").references(() => users.id),
+    reason: varchar("reason", { length: 100 }).notNull().$type<RectificationReason>(),
+    comment: text("comment"),
+    status: varchar("status", { length: 50 }).notNull().default("REQUESTED").$type<RectificationStatus>(),
+    creditNoteId: uuid("credit_note_id").references((): AnyPgColumn => creditNotes.id),
+    creditNoteDocumentId: uuid("credit_note_document_id").references((): AnyPgColumn => documents.id),
+    replacementInvoiceDocumentId: uuid("replacement_invoice_document_id").references((): AnyPgColumn => documents.id),
+    correctedCustomerSnapshot: jsonb("corrected_customer_snapshot"),
+    correctedItemsSnapshot: jsonb("corrected_items_snapshot"),
+    siiGrossTotal: bigint("sii_gross_total", { mode: "number" }),
+    grossDifference: bigint("gross_difference", { mode: "number" }),
+    reconciliationStatus: varchar("reconciliation_status", { length: 50 }).$type<ReconciliationStatus>(),
+    requestedAt: timestamp("requested_at", { withTimezone: true }).defaultNow().notNull(),
+    assignedAt: timestamp("assigned_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("rectifications_invoice_request_id_idx").on(table.invoiceRequestId),
+    index("rectifications_status_requested_at_idx").on(table.status, table.requestedAt),
+    index("rectifications_assigned_to_idx").on(table.assignedTo),
   ]
 );
 
@@ -260,3 +352,7 @@ export type RequestCorrection = typeof requestCorrections.$inferSelect;
 export type NewRequestCorrection = typeof requestCorrections.$inferInsert;
 export type Document = typeof documents.$inferSelect;
 export type NewDocument = typeof documents.$inferInsert;
+export type CreditNote = typeof creditNotes.$inferSelect;
+export type NewCreditNote = typeof creditNotes.$inferInsert;
+export type Rectification = typeof rectifications.$inferSelect;
+export type NewRectification = typeof rectifications.$inferInsert;

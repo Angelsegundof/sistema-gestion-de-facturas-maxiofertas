@@ -4,6 +4,7 @@ import {
   invoiceRequests,
   invoiceRequestItems,
   requestCorrections,
+  rectifications,
   warehouses,
   users,
   InvoiceRequest,
@@ -92,11 +93,18 @@ export async function getQueueCountersService(): Promise<QueueSummaryCounters> {
       )
     );
 
+  const [changesRequestedRes] = await db
+    .select({ count: count() })
+    .from(rectifications)
+    .where(
+      sql`${rectifications.status} IN ('REQUESTED', 'IN_PROGRESS', 'CREDIT_NOTE_REGISTERED', 'NEW_INVOICE_PENDING')`
+    );
+
   return {
     pendingCount: pendingRes?.count || 0,
     inProgressCount: inProgressRes?.count || 0,
     needsCorrectionCount: needsCorrectionRes?.count || 0,
-    changesRequestedCount: 0,
+    changesRequestedCount: changesRequestedRes?.count || 0,
     completedTodayCount: completedTodayRes?.count || 0,
   };
 }
