@@ -122,29 +122,7 @@ export async function createInvoiceRequestService(
     throw new Error("Base de datos no disponible.");
   }
 
-  // 1. Idempotency Check
-  if (options.idempotencyKey) {
-    const existingReqList: InvoiceRequest[] = await db
-      .select()
-      .from(invoiceRequests)
-      .where(eq(invoiceRequests.idempotencyKey, options.idempotencyKey))
-      .limit(1);
-
-    if (existingReqList.length > 0) {
-      const itemsList: InvoiceRequestItem[] = await db
-        .select()
-        .from(invoiceRequestItems)
-        .where(eq(invoiceRequestItems.invoiceRequestId, existingReqList[0].id))
-        .orderBy(invoiceRequestItems.lineNumber);
-
-      return {
-        success: true,
-        request: sanitizeInvoiceRequest(existingReqList[0], itemsList),
-      };
-    }
-  }
-
-  // 2. Resolver Bodega autorizada server-side
+  // 1. Resolver Bodega autorizada server-side
   let targetWarehouseId = currentUser.warehouseId;
   if (currentUser.role === "ADMIN" && input.warehouseId) {
     targetWarehouseId = input.warehouseId;
@@ -164,7 +142,7 @@ export async function createInvoiceRequestService(
     throw new Error("La bodega seleccionada no existe o se encuentra inactiva.");
   }
 
-  // 3. Validar y normalizar RUT del cliente
+  // 2. Validar y normalizar RUT del cliente
   const rawRut = input.customer.rut.trim();
   if (!validateRut(rawRut)) {
     throw new Error("El RUT del cliente no es v?lido seg?n el algoritmo m?dulo 11.");
@@ -175,8 +153,50 @@ export async function createInvoiceRequestService(
   const normalizedEmail = input.customer.email ? input.customer.email.trim().toLowerCase() : null;
   const normalizedPhone = input.customer.phone ? input.customer.phone.trim() : null;
 
-  // 4. Calcular precios y totales de forma determin?stica
+  // 3. Calcular precios y totales de forma determin?stica
   const calculatedTotals = calculateRequestTotals(input.items);
+
+  // 4. Idempotency Check (Aislado estrictamente por usuario)
+  if (options.idempotencyKey) {
+    const existingReqList: InvoiceRequest[] = await db
+      .select()
+      .from(invoiceRequests)
+      .where(
+        and(
+          eq(invoiceRequests.requestedBy, currentUser.id),
+          eq(invoiceRequests.idempotencyKey, options.idempotencyKey)
+        )
+      )
+      .limit(1);
+
+    if (existingReqList.length > 0) {
+      const existing = existingReqList[0];
+
+      // Validar coincidencia de payload
+      const existingCanonicalRut = normalizeRut(existing.customerRutSnapshot);
+      const isPayloadMatching =
+        existingCanonicalRut === canonicalRut &&
+        existing.expectedGrossTotal === calculatedTotals.expectedGrossTotal &&
+        existing.warehouseId === targetWarehouseId;
+
+      if (!isPayloadMatching) {
+        throw new Error(
+          `IDEMPOTENCY_PAYLOAD_MISMATCH: La clave de idempotencia '${options.idempotencyKey}' ya fue utilizada con datos de solicitud diferentes.`
+        );
+      }
+
+      const itemsList: InvoiceRequestItem[] = await db
+        .select()
+        .from(invoiceRequestItems)
+        .where(eq(invoiceRequestItems.invoiceRequestId, existing.id))
+        .orderBy(invoiceRequestItems.lineNumber);
+
+      return {
+        success: true,
+        request: sanitizeInvoiceRequest(existing, itemsList),
+      };
+    }
+  }
 
   // 5. Detecci?n de duplicados
   const candidate = await findDuplicateCandidate(db, {

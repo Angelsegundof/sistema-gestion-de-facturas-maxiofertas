@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import * as schema from "@/lib/db/schema";
 import {
   generateRequestNumber,
@@ -14,7 +14,8 @@ import * as path from "path";
 describe("Invoice Requests Domain Integration Tests (Real PostgreSQL)", () => {
   let pglite: PGlite;
   let db: ReturnType<typeof drizzle<typeof schema>>;
-  let warehouseUser: SanitizedUser;
+  let warehouseUserA: SanitizedUser;
+  let warehouseUserB: SanitizedUser;
   let testWarehouse: schema.Warehouse;
   let testCustomer: schema.Customer;
 
@@ -46,26 +47,46 @@ describe("Invoice Requests Domain Integration Tests (Real PostgreSQL)", () => {
 
     const insertedUsers: schema.User[] = await db
       .insert(schema.users)
-      .values({
-        email: "solicitante@maxiofertas.cl",
-        name: "Araceli Solicitante",
-        passwordHash: "hash123",
-        role: "WAREHOUSE_USER",
-        warehouseId: testWarehouse.id,
-        active: true,
-      })
+      .values([
+        {
+          email: "solicitante.a@maxiofertas.cl",
+          name: "Araceli Solicitante A",
+          passwordHash: "hash123",
+          role: "WAREHOUSE_USER",
+          warehouseId: testWarehouse.id,
+          active: true,
+        },
+        {
+          email: "solicitante.b@maxiofertas.cl",
+          name: "Bernardo Solicitante B",
+          passwordHash: "hash123",
+          role: "WAREHOUSE_USER",
+          warehouseId: testWarehouse.id,
+          active: true,
+        },
+      ])
       .returning();
-    const user = insertedUsers[0];
 
-    warehouseUser = {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
-      warehouseId: user.warehouseId,
-      active: user.active,
-      createdAt: user.createdAt.toISOString(),
-      updatedAt: user.updatedAt.toISOString(),
+    warehouseUserA = {
+      id: insertedUsers[0].id,
+      email: insertedUsers[0].email,
+      name: insertedUsers[0].name,
+      role: insertedUsers[0].role,
+      warehouseId: insertedUsers[0].warehouseId,
+      active: insertedUsers[0].active,
+      createdAt: insertedUsers[0].createdAt.toISOString(),
+      updatedAt: insertedUsers[0].updatedAt.toISOString(),
+    };
+
+    warehouseUserB = {
+      id: insertedUsers[1].id,
+      email: insertedUsers[1].email,
+      name: insertedUsers[1].name,
+      role: insertedUsers[1].role,
+      warehouseId: insertedUsers[1].warehouseId,
+      active: insertedUsers[1].active,
+      createdAt: insertedUsers[1].createdAt.toISOString(),
+      updatedAt: insertedUsers[1].updatedAt.toISOString(),
     };
 
     const insertedCustomers: schema.Customer[] = await db
@@ -93,7 +114,7 @@ describe("Invoice Requests Domain Integration Tests (Real PostgreSQL)", () => {
         requestNumber,
         warehouseId: testWarehouse.id,
         customerId: testCustomer.id,
-        requestedBy: warehouseUser.id,
+        requestedBy: warehouseUserA.id,
         status: "PENDING",
         customerRutSnapshot: testCustomer.rutDisplay,
         customerLegalNameSnapshot: testCustomer.legalName,
@@ -152,7 +173,7 @@ describe("Invoice Requests Domain Integration Tests (Real PostgreSQL)", () => {
         requestNumber: "FAC-2026-000001",
         warehouseId: testWarehouse.id,
         customerId: testCustomer.id,
-        requestedBy: warehouseUser.id,
+        requestedBy: warehouseUserA.id,
         status: "PENDING",
         customerRutSnapshot: testCustomer.rutDisplay,
         customerLegalNameSnapshot: testCustomer.legalName,
@@ -191,7 +212,7 @@ describe("Invoice Requests Domain Integration Tests (Real PostgreSQL)", () => {
         requestNumber: num,
         warehouseId: testWarehouse.id,
         customerId: testCustomer.id,
-        requestedBy: warehouseUser.id,
+        requestedBy: warehouseUserA.id,
         status: "PENDING",
         customerRutSnapshot: "76.432.109-K",
         customerLegalNameSnapshot: "Test",
@@ -204,12 +225,11 @@ describe("Invoice Requests Domain Integration Tests (Real PostgreSQL)", () => {
   });
 
   it("4. Duplicate Detection Algorithm: Warns on similar recent requests within 24h", async () => {
-    // 1. Insert existing request
     await db.insert(schema.invoiceRequests).values({
       requestNumber: "FAC-2026-000100",
       warehouseId: testWarehouse.id,
       customerId: testCustomer.id,
-      requestedBy: warehouseUser.id,
+      requestedBy: warehouseUserA.id,
       status: "PENDING",
       customerRutSnapshot: "76.432.109-K",
       customerLegalNameSnapshot: "Cliente Duplicado Test",
@@ -218,7 +238,6 @@ describe("Invoice Requests Domain Integration Tests (Real PostgreSQL)", () => {
       createdAt: new Date(),
     });
 
-    // 2. Query duplicate candidate
     const candidate = await findDuplicateCandidate(db, {
       canonicalRut: "76432109K",
       warehouseId: testWarehouse.id,
@@ -230,7 +249,6 @@ describe("Invoice Requests Domain Integration Tests (Real PostgreSQL)", () => {
     expect(candidate?.requestNumber).toBe("FAC-2026-000100");
     expect(candidate?.grossTotal).toBe(68000);
 
-    // 3. Different total should NOT trigger duplicate candidate
     const nonCandidate = await findDuplicateCandidate(db, {
       canonicalRut: "76432109K",
       warehouseId: testWarehouse.id,
@@ -241,50 +259,70 @@ describe("Invoice Requests Domain Integration Tests (Real PostgreSQL)", () => {
     expect(nonCandidate).toBeNull();
   });
 
-  it("5. Idempotency Support: Re-submitting with same Idempotency-Key prevents duplicate row", async () => {
-    const key = "idemp-key-unique-12345";
+  it("6. Idempotency Security & Multi-User Isolation: User A and User B isolation with same key", async () => {
+    const sharedKey = "shared-client-uuid-777";
 
-    // 1. Insert request with idempotency key
-    const insertedReqs: schema.InvoiceRequest[] = await db
+    // 1. User A inserts request with key
+    const [reqA] = await db
       .insert(schema.invoiceRequests)
       .values({
-        requestNumber: "FAC-2026-000200",
+        requestNumber: "FAC-2026-000301",
         warehouseId: testWarehouse.id,
         customerId: testCustomer.id,
-        requestedBy: warehouseUser.id,
+        requestedBy: warehouseUserA.id,
         status: "PENDING",
         customerRutSnapshot: "76.432.109-K",
-        customerLegalNameSnapshot: "Cliente Idempotente",
-        customerBusinessActivitySnapshot: "Giro",
+        customerLegalNameSnapshot: "Cliente de A",
+        customerBusinessActivitySnapshot: "Giro A",
         expectedGrossTotal: 25000,
-        idempotencyKey: key,
+        idempotencyKey: sharedKey,
       })
       .returning();
-    const first = insertedReqs[0];
 
-    // 2. Attempting second insert with exact same idempotencyKey fails at DB constraint level
-    await expect(
-      db.insert(schema.invoiceRequests).values({
-        requestNumber: "FAC-2026-000201",
-        warehouseId: testWarehouse.id,
-        customerId: testCustomer.id,
-        requestedBy: warehouseUser.id,
-        status: "PENDING",
-        customerRutSnapshot: "76.432.109-K",
-        customerLegalNameSnapshot: "Cliente Idempotente",
-        customerBusinessActivitySnapshot: "Giro",
-        expectedGrossTotal: 25000,
-        idempotencyKey: key,
-      })
-    ).rejects.toThrow();
-
-    // 3. Fetching by idempotency key returns the original record
-    const fetchedList: schema.InvoiceRequest[] = await db
+    // 2. User A sending same key and same payload is scoped to User A
+    const [fetchedA] = await db
       .select()
       .from(schema.invoiceRequests)
-      .where(eq(schema.invoiceRequests.idempotencyKey, key));
+      .where(
+        and(
+          eq(schema.invoiceRequests.requestedBy, warehouseUserA.id),
+          eq(schema.invoiceRequests.idempotencyKey, sharedKey)
+        )
+      );
+    expect(fetchedA.id).toBe(reqA.id);
 
-    expect(fetchedList[0].id).toBe(first.id);
-    expect(fetchedList[0].requestNumber).toBe("FAC-2026-000200");
+    // 3. User B sends the same key: PostgreSQL constraint UNIQUE(requested_by, idempotency_key) permits User B without error
+    const [reqB] = await db
+      .insert(schema.invoiceRequests)
+      .values({
+        requestNumber: "FAC-2026-000302",
+        warehouseId: testWarehouse.id,
+        customerId: testCustomer.id,
+        requestedBy: warehouseUserB.id,
+        status: "PENDING",
+        customerRutSnapshot: "76.432.109-K",
+        customerLegalNameSnapshot: "Cliente de B",
+        customerBusinessActivitySnapshot: "Giro B",
+        expectedGrossTotal: 40000,
+        idempotencyKey: sharedKey,
+      })
+      .returning();
+
+    expect(reqB.id).not.toBe(reqA.id);
+    expect(reqB.requestedBy).toBe(warehouseUserB.id);
+    expect(reqA.requestedBy).toBe(warehouseUserA.id);
+
+    // 4. User B querying their idempotency key sees ONLY User B's request (NO IDOR leakage)
+    const [fetchedB] = await db
+      .select()
+      .from(schema.invoiceRequests)
+      .where(
+        and(
+          eq(schema.invoiceRequests.requestedBy, warehouseUserB.id),
+          eq(schema.invoiceRequests.idempotencyKey, sharedKey)
+        )
+      );
+    expect(fetchedB.id).toBe(reqB.id);
+    expect(fetchedB.customerLegalNameSnapshot).toBe("Cliente de B");
   });
 });

@@ -43,7 +43,7 @@ CREATE TABLE "invoice_requests" (
 	"completed_at" timestamp with time zone,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "invoice_requests_request_number_unique" UNIQUE("request_number"),
-	CONSTRAINT "invoice_requests_idempotency_key_unique" UNIQUE("idempotency_key")
+	CONSTRAINT "invoice_requests_user_idempotency_unique" UNIQUE("requested_by", "idempotency_key")
 );
 --> statement-breakpoint
 ALTER TABLE "invoice_request_items" ADD CONSTRAINT "invoice_request_items_invoice_request_id_invoice_requests_id_fk" FOREIGN KEY ("invoice_request_id") REFERENCES "public"."invoice_requests"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint

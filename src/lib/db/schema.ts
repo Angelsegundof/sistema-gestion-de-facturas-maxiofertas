@@ -9,6 +9,7 @@ import {
   integer,
   bigint,
   numeric,
+  unique,
   AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
@@ -111,40 +112,46 @@ export const rateLimits = pgTable("rate_limits", {
   resetAt: timestamp("reset_at", { withTimezone: true }).notNull(),
 });
 
-export const invoiceRequests = pgTable("invoice_requests", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  requestNumber: varchar("request_number", { length: 30 }).notNull().unique(),
-  warehouseId: uuid("warehouse_id")
-    .notNull()
-    .references(() => warehouses.id),
-  customerId: uuid("customer_id")
-    .notNull()
-    .references(() => customers.id),
-  requestedBy: uuid("requested_by")
-    .notNull()
-    .references(() => users.id),
-  assignedTo: uuid("assigned_to").references(() => users.id),
-  status: varchar("status", { length: 50 }).notNull().default("PENDING").$type<InvoiceRequestStatus>(),
-  customerRutSnapshot: varchar("customer_rut_snapshot", { length: 20 }).notNull(),
-  customerLegalNameSnapshot: varchar("customer_legal_name_snapshot", { length: 200 }).notNull(),
-  customerBusinessActivitySnapshot: varchar("customer_business_activity_snapshot", { length: 250 }).notNull(),
-  customerPhoneSnapshot: varchar("customer_phone_snapshot", { length: 50 }),
-  customerEmailSnapshot: varchar("customer_email_snapshot", { length: 320 }),
-  expectedGrossTotal: bigint("expected_gross_total", { mode: "number" }).notNull(),
-  siiGrossTotal: bigint("sii_gross_total", { mode: "number" }),
-  grossDifference: bigint("gross_difference", { mode: "number" }),
-  reconciliationStatus: varchar("reconciliation_status", { length: 50 }).$type<ReconciliationStatus>(),
-  notes: text("notes"),
-  duplicateWarning: boolean("duplicate_warning").notNull().default(false),
-  duplicateOverride: boolean("duplicate_override").notNull().default(false),
-  duplicateOf: uuid("duplicate_of").references((): AnyPgColumn => invoiceRequests.id),
-  source: varchar("source", { length: 50 }).notNull().default("NATIVE").$type<InvoiceRequestSource>(),
-  idempotencyKey: varchar("idempotency_key", { length: 255 }).unique(),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  assignedAt: timestamp("assigned_at", { withTimezone: true }),
-  completedAt: timestamp("completed_at", { withTimezone: true }),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-});
+export const invoiceRequests = pgTable(
+  "invoice_requests",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    requestNumber: varchar("request_number", { length: 30 }).notNull().unique(),
+    warehouseId: uuid("warehouse_id")
+      .notNull()
+      .references(() => warehouses.id),
+    customerId: uuid("customer_id")
+      .notNull()
+      .references(() => customers.id),
+    requestedBy: uuid("requested_by")
+      .notNull()
+      .references(() => users.id),
+    assignedTo: uuid("assigned_to").references(() => users.id),
+    status: varchar("status", { length: 50 }).notNull().default("PENDING").$type<InvoiceRequestStatus>(),
+    customerRutSnapshot: varchar("customer_rut_snapshot", { length: 20 }).notNull(),
+    customerLegalNameSnapshot: varchar("customer_legal_name_snapshot", { length: 200 }).notNull(),
+    customerBusinessActivitySnapshot: varchar("customer_business_activity_snapshot", { length: 250 }).notNull(),
+    customerPhoneSnapshot: varchar("customer_phone_snapshot", { length: 50 }),
+    customerEmailSnapshot: varchar("customer_email_snapshot", { length: 320 }),
+    expectedGrossTotal: bigint("expected_gross_total", { mode: "number" }).notNull(),
+    siiGrossTotal: bigint("sii_gross_total", { mode: "number" }),
+    grossDifference: bigint("gross_difference", { mode: "number" }),
+    reconciliationStatus: varchar("reconciliation_status", { length: 50 }).$type<ReconciliationStatus>(),
+    notes: text("notes"),
+    duplicateWarning: boolean("duplicate_warning").notNull().default(false),
+    duplicateOverride: boolean("duplicate_override").notNull().default(false),
+    duplicateOf: uuid("duplicate_of").references((): AnyPgColumn => invoiceRequests.id),
+    source: varchar("source", { length: 50 }).notNull().default("NATIVE").$type<InvoiceRequestSource>(),
+    idempotencyKey: varchar("idempotency_key", { length: 255 }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    assignedAt: timestamp("assigned_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    unique("invoice_requests_user_idempotency_unique").on(table.requestedBy, table.idempotencyKey),
+  ]
+);
 
 export const invoiceRequestItems = pgTable("invoice_request_items", {
   id: uuid("id").defaultRandom().primaryKey(),
