@@ -2,13 +2,12 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { formatCLP } from "@/domain/pricing";
 import { SanitizedInvoiceRequest } from "@/domain/types";
 
 export default function ViewInvoiceRequestPage() {
   const params = useParams();
-  const router = useRouter();
   const requestId = params?.id as string;
 
   const [requestData, setRequestData] = useState<SanitizedInvoiceRequest | null>(null);
@@ -59,6 +58,23 @@ export default function ViewInvoiceRequestPage() {
     );
   }
 
+  const latestCorrection = requestData.corrections?.[0];
+
+  const getStatusBadge = () => {
+    switch (requestData.status) {
+      case "PENDING":
+        return <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">Pendiente</span>;
+      case "IN_PROGRESS":
+        return <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">En proceso</span>;
+      case "NEEDS_CORRECTION":
+        return <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-100 text-rose-800">Necesita correcci?n</span>;
+      case "COMPLETED":
+        return <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">Lista</span>;
+      default:
+        return <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-800">{requestData.status}</span>;
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-2xl mx-auto space-y-6">
@@ -66,10 +82,36 @@ export default function ViewInvoiceRequestPage() {
           <Link href="/" className="text-xs text-blue-600 hover:underline flex items-center gap-1">
             ? Volver al inicio
           </Link>
-          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">
-            {requestData.status === "PENDING" ? "Pendiente de facturaci?n" : requestData.status}
-          </span>
+          {getStatusBadge()}
         </div>
+
+        {/* Needs Correction Action Banner */}
+        {requestData.status === "NEEDS_CORRECTION" && (
+          <div className="bg-rose-50 border-2 border-rose-300 rounded-2xl p-6 shadow-sm space-y-3">
+            <div className="flex items-center gap-2 text-rose-800 text-sm font-bold uppercase tracking-wider">
+              <span>?</span>
+              <span>Esta solicitud necesita una correcci?n</span>
+            </div>
+            {latestCorrection && (
+              <div className="text-xs text-slate-800 space-y-1">
+                <p>
+                  <strong className="text-slate-900">Motivo:</strong> {latestCorrection.reason}
+                </p>
+                {latestCorrection.comment && (
+                  <p className="p-3 bg-white rounded-lg border border-rose-200 text-slate-700">
+                    {latestCorrection.comment}
+                  </p>
+                )}
+              </div>
+            )}
+            <Link
+              href={`/requests/${requestData.id}/corregir`}
+              className="inline-block py-2.5 px-5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-sm transition"
+            >
+              Corregir ahora
+            </Link>
+          </div>
+        )}
 
         {/* Card Principal */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 sm:p-8 space-y-6">

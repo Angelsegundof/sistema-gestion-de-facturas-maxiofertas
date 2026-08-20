@@ -9,7 +9,7 @@ describe("PostgreSQL Migrations Scenarios (Real PostgreSQL)", () => {
     return fs.readFileSync(fullPath, "utf8");
   };
 
-  it("Scenario A: Full fresh migration from scratch (0000 -> 0001 -> 0002) on empty DB", async () => {
+  it("Scenario A: Full fresh migration from scratch (0000 -> 0001 -> 0002 -> 0003) on empty DB", async () => {
     const db = new PGlite();
 
     const m0 = readMigration("0000_cheerful_giant_girl.sql");
@@ -27,6 +27,11 @@ describe("PostgreSQL Migrations Scenarios (Real PostgreSQL)", () => {
       await db.exec(st);
     }
 
+    const m3 = readMigration("0003_rapid_boomerang.sql");
+    for (const st of m3.split("--> statement-breakpoint").filter((s) => s.trim())) {
+      await db.exec(st);
+    }
+
     const tablesRes = await db.query<{ table_name: string }>(
       "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name;"
     );
@@ -37,24 +42,24 @@ describe("PostgreSQL Migrations Scenarios (Real PostgreSQL)", () => {
     expect(tables).toContain("invoice_request_items");
     expect(tables).toContain("invoice_requests");
     expect(tables).toContain("rate_limits");
+    expect(tables).toContain("request_corrections");
     expect(tables).toContain("sessions");
     expect(tables).toContain("users");
     expect(tables).toContain("warehouses");
 
-    // Verify foreign keys from invoice_requests
+    // Verify foreign keys from request_corrections
     const fkRes = await db.query<{ constraint_name: string }>(
-      "SELECT constraint_name FROM information_schema.table_constraints WHERE table_name = 'invoice_requests' AND constraint_type = 'FOREIGN KEY';"
+      "SELECT constraint_name FROM information_schema.table_constraints WHERE table_name = 'request_corrections' AND constraint_type = 'FOREIGN KEY';"
     );
     const fkNames = fkRes.rows.map((r) => r.constraint_name);
-    expect(fkNames).toContain("invoice_requests_warehouse_id_warehouses_id_fk");
-    expect(fkNames).toContain("invoice_requests_customer_id_customers_id_fk");
-    expect(fkNames).toContain("invoice_requests_requested_by_users_id_fk");
+    expect(fkNames).toContain("request_corrections_invoice_request_id_invoice_requests_id_fk");
+    expect(fkNames).toContain("request_corrections_requested_by_users_id_fk");
   });
 
-  it("Scenario B: Upgrade from Phase 3.1 schema to Phase 4 with existing data preservation", async () => {
+  it("Scenario B: Upgrade from Phase 4 schema to Phase 5 with existing data preservation", async () => {
     const db = new PGlite();
 
-    // 1. Run Phase 2 & 3 migrations
+    // 1. Run migrations up to Phase 4 (0000, 0001, 0002)
     const m0 = readMigration("0000_cheerful_giant_girl.sql");
     for (const st of m0.split("--> statement-breakpoint").filter((s) => s.trim())) {
       await db.exec(st);
@@ -65,7 +70,12 @@ describe("PostgreSQL Migrations Scenarios (Real PostgreSQL)", () => {
       await db.exec(st);
     }
 
-    // 2. Insert existing Phase 3 data
+    const m2 = readMigration("0002_concerned_molly_hayes.sql");
+    for (const st of m2.split("--> statement-breakpoint").filter((s) => s.trim())) {
+      await db.exec(st);
+    }
+
+    // 2. Insert existing Phase 4 data
     await db.exec(`
       INSERT INTO warehouses (id, code, name, active)
       VALUES ('e0eebc99-9c0b-4ef8-bb6d-6bb9bd380a03', 'CENTRAL', 'Bodega Central', true);
@@ -81,9 +91,14 @@ describe("PostgreSQL Migrations Scenarios (Real PostgreSQL)", () => {
       VALUES ('f0eebc99-9c0b-4ef8-bb6d-6bb9bd380a04', '76432109K', '76.432.109-K', 'Cliente Existente SPA', 'Giro', true);
     `);
 
-    // 3. Apply Phase 4 upgrade migration
-    const m2 = readMigration("0002_concerned_molly_hayes.sql");
-    for (const st of m2.split("--> statement-breakpoint").filter((s) => s.trim())) {
+    await db.exec(`
+      INSERT INTO invoice_requests (id, request_number, warehouse_id, customer_id, requested_by, status, customer_rut_snapshot, customer_legal_name_snapshot, customer_business_activity_snapshot, expected_gross_total)
+      VALUES ('11eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 'FAC-2026-000001', 'e0eebc99-9c0b-4ef8-bb6d-6bb9bd380a03', 'f0eebc99-9c0b-4ef8-bb6d-6bb9bd380a04', 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01', 'PENDING', '76.432.109-K', 'Cliente Existente SPA', 'Giro', 68000);
+    `);
+
+    // 3. Apply Phase 5 upgrade migration (0003)
+    const m3 = readMigration("0003_rapid_boomerang.sql");
+    for (const st of m3.split("--> statement-breakpoint").filter((s) => s.trim())) {
       await db.exec(st);
     }
 
@@ -91,16 +106,16 @@ describe("PostgreSQL Migrations Scenarios (Real PostgreSQL)", () => {
     const userRes = await db.query("SELECT * FROM users WHERE email = 'solicitante@maxiofertas.cl';");
     expect(userRes.rows).toHaveLength(1);
 
-    const custRes = await db.query("SELECT * FROM customers WHERE rut_canonical = '76432109K';");
-    expect(custRes.rows).toHaveLength(1);
-
-    // 5. Create invoice request using existing references
-    await db.exec(`
-      INSERT INTO invoice_requests (id, request_number, warehouse_id, customer_id, requested_by, status, customer_rut_snapshot, customer_legal_name_snapshot, customer_business_activity_snapshot, expected_gross_total)
-      VALUES ('11eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 'FAC-2026-000001', 'e0eebc99-9c0b-4ef8-bb6d-6bb9bd380a03', 'f0eebc99-9c0b-4ef8-bb6d-6bb9bd380a04', 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01', 'PENDING', '76.432.109-K', 'Cliente Existente SPA', 'Giro', 68000);
-    `);
-
     const reqRes = await db.query("SELECT * FROM invoice_requests WHERE request_number = 'FAC-2026-000001';");
     expect(reqRes.rows).toHaveLength(1);
+
+    // 5. Insert new Phase 5 observation
+    await db.exec(`
+      INSERT INTO request_corrections (id, invoice_request_id, reason, comment, requested_by)
+      VALUES ('22eebc99-9c0b-4ef8-bb6d-6bb9bd380a22', '11eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 'INVALID_RUT', 'RUT de prueba', 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01');
+    `);
+
+    const obsRes = await db.query("SELECT * FROM request_corrections WHERE invoice_request_id = '11eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';");
+    expect(obsRes.rows).toHaveLength(1);
   });
 });

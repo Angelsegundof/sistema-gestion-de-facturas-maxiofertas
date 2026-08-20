@@ -1,24 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { eq, desc, and, or, ilike, sql } from "drizzle-orm";
-import { getDb } from "@/lib/db";
 import {
-  invoiceRequests,
-  invoiceRequestItems,
-  invoiceRequestStatuses,
-  InvoiceRequestStatus,
-} from "@/lib/db/schema";
-import {
-  requireAuth,
   requirePermission,
   verifyCsrfOrigin,
   AuthError,
 } from "@/lib/auth";
 import {
   createInvoiceRequestService,
-  sanitizeInvoiceRequest,
 } from "@/lib/services/invoice-requests";
-import { ApiResponse, SanitizedInvoiceRequest } from "@/types";
+import {
+  getQueueRequestsService,
+  getQueueCountersService,
+} from "@/lib/services/invoice-queue";
+import {
+  invoiceRequestStatuses,
+  InvoiceRequestStatus,
+} from "@/lib/db/schema";
+import { ApiResponse, SanitizedInvoiceRequest, QueueSummaryCounters } from "@/types";
 
 const createInvoiceRequestSchema = z.object({
   customer: z.object({
@@ -140,6 +138,18 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Error inesperado al crear la solicitud.";
+    if (message.startsWith("IDEMPOTENCY_PAYLOAD_MISMATCH")) {
+      return NextResponse.json<ApiResponse<null>>(
+        {
+          success: false,
+          error: {
+            code: "IDEMPOTENCY_PAYLOAD_MISMATCH",
+            message,
+          },
+        },
+        { status: 409 }
+      );
+    }
     return NextResponse.json<ApiResponse<null>>(
       {
         success: false,
@@ -171,60 +181,52 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const statusParam = searchParams.get("status") as InvoiceRequestStatus | null;
-  const warehouseIdParam = searchParams.get("warehouseId");
-  const searchParam = searchParams.get("search")?.trim();
+  const warehouseIdParam = searchParams.get("warehouseId") || undefined;
+  const assignedToParam = searchParams.get("assignedTo") || undefined;
+  const searchParam = searchParams.get("search")?.trim() || undefined;
   const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
   const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get("pageSize") || "25", 10)));
-  const offset = (page - 1) * pageSize;
+  const includeCounters = searchParams.get("counters") === "true";
 
-  const db = getDb();
-  if (!db) {
+  const validStatus = statusParam && invoiceRequestStatuses.includes(statusParam) ? statusParam : undefined;
+
+  try {
+    const queueData = await getQueueRequestsService({
+      status: validStatus,
+      warehouseId: warehouseIdParam,
+      assignedTo: assignedToParam,
+      search: searchParam,
+      page,
+      pageSize,
+    });
+
+    let counters: QueueSummaryCounters | undefined = undefined;
+    if (includeCounters) {
+      counters = await getQueueCountersService();
+    }
+
+    return NextResponse.json<
+      ApiResponse<{
+        requests: SanitizedInvoiceRequest[];
+        total: number;
+        page: number;
+        pageSize: number;
+        counters?: QueueSummaryCounters;
+      }>
+    >(
+      {
+        success: true,
+        data: {
+          ...queueData,
+          counters,
+        },
+      },
+      { status: 200 }
+    );
+  } catch {
     return NextResponse.json<ApiResponse<null>>(
       { success: false, error: { code: "SERVICE_UNAVAILABLE", message: "Base de datos no disponible" } },
       { status: 503 }
     );
   }
-
-  const conditions = [];
-
-  if (statusParam && invoiceRequestStatuses.includes(statusParam)) {
-    conditions.push(eq(invoiceRequests.status, statusParam));
-  }
-
-  if (warehouseIdParam) {
-    conditions.push(eq(invoiceRequests.warehouseId, warehouseIdParam));
-  }
-
-  if (searchParam) {
-    conditions.push(
-      or(
-        ilike(invoiceRequests.requestNumber, `%${searchParam}%`),
-        ilike(invoiceRequests.customerRutSnapshot, `%${searchParam}%`),
-        ilike(invoiceRequests.customerLegalNameSnapshot, `%${searchParam}%`)
-      )
-    );
-  }
-
-  const query = db
-    .select()
-    .from(invoiceRequests)
-    .where(conditions.length > 0 ? and(...conditions) : undefined)
-    .orderBy(desc(invoiceRequests.createdAt))
-    .limit(pageSize)
-    .offset(offset);
-
-  const requestList = await query;
-  const sanitizedList: SanitizedInvoiceRequest[] = requestList.map((r) => sanitizeInvoiceRequest(r));
-
-  return NextResponse.json<ApiResponse<{ requests: SanitizedInvoiceRequest[]; page: number; pageSize: number }>>(
-    {
-      success: true,
-      data: {
-        requests: sanitizedList,
-        page,
-        pageSize,
-      },
-    },
-    { status: 200 }
-  );
 }

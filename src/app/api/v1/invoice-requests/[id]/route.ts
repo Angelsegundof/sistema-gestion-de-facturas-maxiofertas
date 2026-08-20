@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import {
   invoiceRequests,
   invoiceRequestItems,
+  requestCorrections,
+  warehouses,
+  users,
 } from "@/lib/db/schema";
 import { requireAuth, AuthError } from "@/lib/auth";
-import { sanitizeInvoiceRequest } from "@/lib/services/invoice-requests";
+import { sanitizeQueueInvoiceRequest } from "@/lib/services/invoice-queue";
 import { ApiResponse, SanitizedInvoiceRequest } from "@/types";
 
 export async function GET(
@@ -39,8 +42,15 @@ export async function GET(
   }
 
   const requestList = await db
-    .select()
+    .select({
+      request: invoiceRequests,
+      warehouseName: warehouses.name,
+      warehouseCode: warehouses.code,
+      requesterName: users.name,
+    })
     .from(invoiceRequests)
+    .leftJoin(warehouses, eq(invoiceRequests.warehouseId, warehouses.id))
+    .leftJoin(users, eq(invoiceRequests.requestedBy, users.id))
     .where(eq(invoiceRequests.id, id))
     .limit(1);
 
@@ -57,7 +67,7 @@ export async function GET(
     );
   }
 
-  const targetReq = requestList[0];
+  const targetReq = requestList[0].request;
 
   // IDOR Protection: WAREHOUSE_USER can ONLY access requests created by themselves
   if (currentUser.role === "WAREHOUSE_USER" && targetReq.requestedBy !== currentUser.id) {
@@ -79,7 +89,57 @@ export async function GET(
     .where(eq(invoiceRequestItems.invoiceRequestId, targetReq.id))
     .orderBy(invoiceRequestItems.lineNumber);
 
-  const sanitized = sanitizeInvoiceRequest(targetReq, itemsList);
+  const correctionsList = await db
+    .select({
+      id: requestCorrections.id,
+      invoiceRequestId: requestCorrections.invoiceRequestId,
+      reason: requestCorrections.reason,
+      comment: requestCorrections.comment,
+      requestedBy: requestCorrections.requestedBy,
+      resolvedBy: requestCorrections.resolvedBy,
+      createdAt: requestCorrections.createdAt,
+      resolvedAt: requestCorrections.resolvedAt,
+      requestedByName: users.name,
+    })
+    .from(requestCorrections)
+    .leftJoin(users, eq(requestCorrections.requestedBy, users.id))
+    .where(eq(requestCorrections.invoiceRequestId, targetReq.id))
+    .orderBy(desc(requestCorrections.createdAt));
+
+  const sanitized = sanitizeQueueInvoiceRequest(
+    targetReq,
+    itemsList,
+    correctionsList.map((c) => ({
+      id: c.id,
+      invoiceRequestId: c.invoiceRequestId,
+      reason: c.reason,
+      comment: c.comment,
+      requestedBy: c.requestedBy,
+      resolvedBy: c.resolvedBy,
+      createdAt: c.createdAt,
+      resolvedAt: c.resolvedAt,
+    }))
+  );
+
+  sanitized.requesterName = requestList[0].requesterName || "Solicitante";
+  if (requestList[0].warehouseName && requestList[0].warehouseCode) {
+    sanitized.warehouse = {
+      id: targetReq.warehouseId,
+      name: requestList[0].warehouseName,
+      code: requestList[0].warehouseCode,
+      active: true,
+      createdAt: targetReq.createdAt.toISOString(),
+      updatedAt: targetReq.updatedAt.toISOString(),
+    };
+  }
+
+  // Populate user names on corrections
+  if (sanitized.corrections && sanitized.corrections.length > 0) {
+    sanitized.corrections = sanitized.corrections.map((c, idx) => ({
+      ...c,
+      requestedByName: correctionsList[idx]?.requestedByName || "Ejecutor",
+    }));
+  }
 
   return NextResponse.json<ApiResponse<{ request: SanitizedInvoiceRequest }>>(
     {

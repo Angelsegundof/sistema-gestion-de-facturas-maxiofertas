@@ -18,7 +18,11 @@ export type AuditAction =
   | "CUSTOMER_UPDATED"
   | "REQUEST_CREATED"
   | "DUPLICATE_WARNING_SHOWN"
-  | "DUPLICATE_OVERRIDE";
+  | "DUPLICATE_OVERRIDE"
+  | "REQUEST_ASSIGNED"
+  | "REQUEST_CORRECTION_REQUESTED"
+  | "REQUEST_RESUBMITTED"
+  | "REQUEST_REASSIGNED";
 
 export interface LogAuditParams {
   userId?: string | null;

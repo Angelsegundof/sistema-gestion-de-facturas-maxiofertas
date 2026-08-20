@@ -22,6 +22,13 @@
       "when": 1787233274426,
       "tag": "0002_concerned_molly_hayes",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1787237394612,
+      "tag": "0003_rapid_boomerang",
+      "breakpoints": true
     }
   ]
 }

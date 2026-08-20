@@ -10,6 +10,7 @@ import {
   bigint,
   numeric,
   unique,
+  index,
   AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
@@ -47,6 +48,21 @@ export const invoiceRequestSources = [
 ] as const;
 
 export type InvoiceRequestSource = (typeof invoiceRequestSources)[number];
+
+export const requestCorrectionReasons = [
+  "INVALID_RUT",
+  "INVALID_LEGAL_NAME",
+  "INVALID_BUSINESS_ACTIVITY",
+  "WRONG_TOTAL",
+  "INCOMPLETE_PRODUCTS",
+  "WRONG_PRICE",
+  "MISSING_INFORMATION",
+  "TAX_DATA_INCONSISTENT",
+  "DUPLICATE_REQUEST",
+  "OTHER",
+] as const;
+
+export type RequestCorrectionReason = (typeof requestCorrectionReasons)[number];
 
 export const warehouses = pgTable("warehouses", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -150,6 +166,8 @@ export const invoiceRequests = pgTable(
   },
   (table) => [
     unique("invoice_requests_user_idempotency_unique").on(table.requestedBy, table.idempotencyKey),
+    index("invoice_requests_status_created_at_idx").on(table.status, table.createdAt),
+    index("invoice_requests_assigned_to_idx").on(table.assignedTo),
   ]
 );
 
@@ -170,6 +188,21 @@ export const invoiceRequestItems = pgTable("invoice_request_items", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+export const requestCorrections = pgTable("request_corrections", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  invoiceRequestId: uuid("invoice_request_id")
+    .notNull()
+    .references(() => invoiceRequests.id, { onDelete: "cascade" }),
+  reason: varchar("reason", { length: 100 }).notNull().$type<RequestCorrectionReason>(),
+  comment: text("comment"),
+  requestedBy: uuid("requested_by")
+    .notNull()
+    .references(() => users.id),
+  resolvedBy: uuid("resolved_by").references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+});
+
 export type Warehouse = typeof warehouses.$inferSelect;
 export type NewWarehouse = typeof warehouses.$inferInsert;
 export type Customer = typeof customers.$inferSelect;
@@ -186,3 +219,5 @@ export type InvoiceRequest = typeof invoiceRequests.$inferSelect;
 export type NewInvoiceRequest = typeof invoiceRequests.$inferInsert;
 export type InvoiceRequestItem = typeof invoiceRequestItems.$inferSelect;
 export type NewInvoiceRequestItem = typeof invoiceRequestItems.$inferInsert;
+export type RequestCorrection = typeof requestCorrections.$inferSelect;
+export type NewRequestCorrection = typeof requestCorrections.$inferInsert;

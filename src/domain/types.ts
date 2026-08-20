@@ -44,6 +44,18 @@ export type ReconciliationStatus = "MATCH" | "ROUNDING_ACCEPTED" | "MISMATCH";
 
 export type InvoiceRequestSource = "NATIVE" | "GOOGLE_SHEETS_LEGACY";
 
+export type RequestCorrectionReason =
+  | "INVALID_RUT"
+  | "INVALID_LEGAL_NAME"
+  | "INVALID_BUSINESS_ACTIVITY"
+  | "WRONG_TOTAL"
+  | "INCOMPLETE_PRODUCTS"
+  | "WRONG_PRICE"
+  | "MISSING_INFORMATION"
+  | "TAX_DATA_INCONSISTENT"
+  | "DUPLICATE_REQUEST"
+  | "OTHER";
+
 export interface SanitizedWarehouse {
   id: string;
   code: string;
@@ -93,6 +105,27 @@ export interface SanitizedInvoiceRequestItem {
   updatedAt: string;
 }
 
+export interface SanitizedRequestCorrection {
+  id: string;
+  invoiceRequestId: string;
+  reason: RequestCorrectionReason;
+  comment: string | null;
+  requestedBy: string;
+  requestedByName?: string;
+  resolvedBy: string | null;
+  resolvedByName?: string | null;
+  createdAt: string;
+  resolvedAt: string | null;
+}
+
+export type AgeCategory = "under_30m" | "30_60m" | "1_2h" | "over_2h";
+
+export interface AgeIndicator {
+  minutesElapsed: number;
+  displayAge: string;
+  category: AgeCategory;
+}
+
 export interface SanitizedInvoiceRequest {
   id: string;
   requestNumber: string;
@@ -124,7 +157,9 @@ export interface SanitizedInvoiceRequest {
   assignedAt: string | null;
   completedAt: string | null;
   updatedAt: string;
+  age?: AgeIndicator;
   items?: SanitizedInvoiceRequestItem[];
+  corrections?: SanitizedRequestCorrection[];
 }
 
 export interface DuplicateCandidate {
@@ -135,4 +170,12 @@ export interface DuplicateCandidate {
   status: InvoiceRequestStatus;
   customerLegalName: string;
   customerRut: string;
+}
+
+export interface QueueSummaryCounters {
+  pendingCount: number;
+  inProgressCount: number;
+  needsCorrectionCount: number;
+  changesRequestedCount: number;
+  completedTodayCount: number;
 }

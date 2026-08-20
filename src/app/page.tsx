@@ -81,11 +81,33 @@ export default async function HomePage() {
           </div>
         </header>
 
-        {/* M?dulo de Acci?n Principal para Solicitante / Bodega */}
-        {(user.role === "WAREHOUSE_USER" || user.role === "ADMIN") && (
-          <section className="p-6 bg-gradient-to-r from-slate-900 to-blue-950 text-white rounded-2xl shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        {/* Acciones principales seg?n Rol */}
+        {(user.role === "INVOICE_EXECUTOR" || user.role === "ADMIN" || user.role === "MANAGEMENT") && (
+          <section className="p-6 bg-gradient-to-r from-blue-900 to-indigo-950 text-white rounded-2xl shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
-              <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">M?dulo Solicitante</span>
+              <span className="text-xs font-bold uppercase tracking-wider text-blue-300">
+                M?dulo Operacional ? Fase 5
+              </span>
+              <h2 className="text-xl font-bold mt-1">Cola de Facturaci?n y Mesa de Trabajo</h2>
+              <p className="text-xs text-slate-300 mt-1 max-w-md">
+                Consulta las facturas pendientes ordenadas por antig?edad (FIFO), toma solicitudes y gestiona observaciones.
+              </p>
+            </div>
+            <Link
+              href="/gestion"
+              className="inline-flex items-center justify-center py-3 px-6 bg-blue-500 hover:bg-blue-600 text-white font-bold text-sm rounded-xl shadow-md transition"
+            >
+              ?? Ir a Gesti?n de Facturas
+            </Link>
+          </section>
+        )}
+
+        {(user.role === "WAREHOUSE_USER" || user.role === "ADMIN") && (
+          <section className="p-6 bg-gradient-to-r from-slate-900 to-emerald-950 text-white rounded-2xl shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+              <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
+                M?dulo Solicitante
+              </span>
               <h2 className="text-xl font-bold mt-1">Crear Solicitud de Factura</h2>
               <p className="text-xs text-slate-300 mt-1 max-w-md">
                 Ingresa los datos del cliente y productos con precios IVA incluido para enviar a facturaci?n.
