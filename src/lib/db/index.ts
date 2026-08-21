@@ -25,10 +25,21 @@ function initLocalPglite(): PgliteDatabase<typeof schema> {
     pglite = new PGlite();
   } else {
     const dataDir = path.resolve(process.cwd(), ".data/local_qa");
-    if (!fs.existsSync(dataDir)) {
-      fs.mkdirSync(dataDir, { recursive: true });
+    try {
+      if (!fs.existsSync(dataDir)) {
+        fs.mkdirSync(dataDir, { recursive: true });
+      }
+      pglite = new PGlite(dataDir);
+    } catch {
+      // If corrupted or locked, fallback to clean recreation or memory
+      try {
+        fs.rmSync(dataDir, { recursive: true, force: true });
+        fs.mkdirSync(dataDir, { recursive: true });
+        pglite = new PGlite(dataDir);
+      } catch {
+        pglite = new PGlite();
+      }
     }
-    pglite = new PGlite(dataDir);
   }
 
   global.__localPgliteInstance = pglite;
