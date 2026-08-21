@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { formatCLP } from "@/domain/pricing";
 import {
   SanitizedUser,
+  SanitizedWarehouse,
   SanitizedInvoiceRequest,
   SanitizedRectification,
   QueueSummaryCounters,
@@ -28,6 +29,8 @@ const REASON_LABELS: Record<RectificationReason, string> = {
 export default function GestionFacturacionPage() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<SanitizedUser | null>(null);
+  const [warehouses, setWarehouses] = useState<SanitizedWarehouse[]>([]);
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>("");
   const [loadingUser, setLoadingUser] = useState(true);
 
   // Queue state
@@ -48,10 +51,10 @@ export default function GestionFacturacionPage() {
   // Search filter
   const [searchTerm, setSearchTerm] = useState("");
 
-  // Load authenticated user
+  // Load authenticated user and warehouses
   useEffect(() => {
     let isMounted = true;
-    async function loadUser() {
+    async function loadUserAndWarehouses() {
       try {
         const res = await fetch("/api/v1/auth/session");
         const data = await res.json();
@@ -63,6 +66,13 @@ export default function GestionFacturacionPage() {
             return;
           }
           setCurrentUser(u);
+
+          // Fetch warehouses for filter
+          const whRes = await fetch("/api/v1/warehouses");
+          const whData = await whRes.json();
+          if (isMounted && whData.success && whData.data?.warehouses) {
+            setWarehouses(whData.data.warehouses);
+          }
         } else {
           router.push("/login");
         }
@@ -72,7 +82,7 @@ export default function GestionFacturacionPage() {
         if (isMounted) setLoadingUser(false);
       }
     }
-    loadUser();
+    loadUserAndWarehouses();
     return () => {
       isMounted = false;
     };
@@ -87,24 +97,25 @@ export default function GestionFacturacionPage() {
       try {
         setLoadingQueue(true);
         const searchParam = searchTerm.trim() ? `&search=${encodeURIComponent(searchTerm.trim())}` : "";
+        const whParam = selectedWarehouseId ? `&warehouseId=${encodeURIComponent(selectedWarehouseId)}` : "";
 
         if (activeTab === "RECTIFICATIONS") {
-          const res = await fetch(`/api/v1/rectifications?page=1&pageSize=50${searchParam}`);
+          const res = await fetch(`/api/v1/rectifications?page=1&pageSize=50${searchParam}${whParam}`);
           const data = await res.json();
           if (!isMounted) return;
           if (data.success && data.data) {
             setRectifications(data.data.rectifications || []);
           }
 
-          // Fetch counters in parallel
-          const countersRes = await fetch(`/api/v1/invoice-requests?status=PENDING&counters=true`);
+          // Fetch counters in parallel with warehouse filter
+          const countersRes = await fetch(`/api/v1/invoice-requests?status=PENDING&counters=true${whParam}`);
           const countersData = await countersRes.json();
           if (isMounted && countersData.success && countersData.data?.counters) {
             setCounters(countersData.data.counters);
           }
         } else {
           const res = await fetch(
-            `/api/v1/invoice-requests?status=${activeTab}&counters=true${searchParam}`
+            `/api/v1/invoice-requests?status=${activeTab}&counters=true${searchParam}${whParam}`
           );
           const data = await res.json();
           if (!isMounted) return;
@@ -126,21 +137,27 @@ export default function GestionFacturacionPage() {
     return () => {
       isMounted = false;
     };
-  }, [currentUser, activeTab, searchTerm]);
+  }, [currentUser, activeTab, searchTerm, selectedWarehouseId]);
 
   const refreshQueue = async () => {
     setLoadingQueue(true);
     try {
       const searchParam = searchTerm.trim() ? `&search=${encodeURIComponent(searchTerm.trim())}` : "";
+      const whParam = selectedWarehouseId ? `&warehouseId=${encodeURIComponent(selectedWarehouseId)}` : "";
       if (activeTab === "RECTIFICATIONS") {
-        const res = await fetch(`/api/v1/rectifications?page=1&pageSize=50${searchParam}`);
+        const res = await fetch(`/api/v1/rectifications?page=1&pageSize=50${searchParam}${whParam}`);
         const data = await res.json();
         if (data.success && data.data) {
           setRectifications(data.data.rectifications || []);
         }
+        const countersRes = await fetch(`/api/v1/invoice-requests?status=PENDING&counters=true${whParam}`);
+        const countersData = await countersRes.json();
+        if (countersData.success && countersData.data?.counters) {
+          setCounters(countersData.data.counters);
+        }
       } else {
         const res = await fetch(
-          `/api/v1/invoice-requests?status=${activeTab}&counters=true${searchParam}`
+          `/api/v1/invoice-requests?status=${activeTab}&counters=true${searchParam}${whParam}`
         );
         const data = await res.json();
         if (data.success && data.data) {
@@ -250,6 +267,16 @@ export default function GestionFacturacionPage() {
           </div>
 
           <div className="flex items-center gap-3">
+            {(currentUser?.role === "MANAGEMENT" || currentUser?.role === "ADMIN") && (
+              <Link
+                href="/estadisticas"
+                className="py-2 px-3.5 bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 text-xs font-bold rounded-xl transition flex items-center gap-1.5 shadow-xs"
+              >
+                <span>📊</span>
+                <span>Ver Estadísticas</span>
+              </Link>
+            )}
+
             <button
               onClick={refreshQueue}
               className="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition"
@@ -394,14 +421,30 @@ export default function GestionFacturacionPage() {
             </button>
           </div>
 
-          <div className="w-full sm:w-72">
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Buscar por número, RUT o cliente..."
-              className="w-full px-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
-            />
+          <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
+            {/* Bodega Selector */}
+            <select
+              value={selectedWarehouseId}
+              onChange={(e) => setSelectedWarehouseId(e.target.value)}
+              className="w-full sm:w-auto px-3 py-1.5 text-xs font-semibold bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+            >
+              <option value="">Bodega: Todas</option>
+              {warehouses.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name}
+                </option>
+              ))}
+            </select>
+
+            <div className="w-full sm:w-64">
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Buscar por número, RUT o cliente..."
+                className="w-full px-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
           </div>
         </div>
 

@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/auth";
 import { getRectificationsQueueService } from "@/lib/services/rectifications";
 import { RectificationStatus } from "@/lib/db/schema";
@@ -23,6 +23,7 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const statusParam = (searchParams.get("status") as RectificationStatus | "ALL") || "ALL";
+  const warehouseId = searchParams.get("warehouseId") || undefined;
   const search = searchParams.get("search") || undefined;
   const page = parseInt(searchParams.get("page") || "1", 10);
   const pageSize = parseInt(searchParams.get("pageSize") || "20", 10);
@@ -30,6 +31,7 @@ export async function GET(request: NextRequest) {
   try {
     const data = await getRectificationsQueueService(currentUser, {
       status: statusParam,
+      warehouseId,
       search,
       page,
       pageSize,

@@ -258,6 +258,7 @@ export async function getRectificationsQueueService(
   currentUser: SanitizedUser,
   params: {
     status?: RectificationStatus | "ALL";
+    warehouseId?: string;
     search?: string;
     page?: number;
     pageSize?: number;
@@ -291,6 +292,10 @@ export async function getRectificationsQueueService(
 
   if (params.status && params.status !== "ALL") {
     conditions.push(eq(rectifications.status, params.status));
+  }
+
+  if (params.warehouseId) {
+    conditions.push(eq(invoiceRequests.warehouseId, params.warehouseId));
   }
 
   if (params.search && params.search.trim()) {

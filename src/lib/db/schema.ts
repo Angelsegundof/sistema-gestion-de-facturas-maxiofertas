@@ -353,6 +353,31 @@ export const migrationRecords = pgTable(
   ]
 );
 
+export const documentShareTokens = pgTable(
+  "document_share_tokens",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    documentId: uuid("document_id")
+      .notNull()
+      .references(() => documents.id, { onDelete: "cascade" }),
+    invoiceRequestId: uuid("invoice_request_id")
+      .notNull()
+      .references(() => invoiceRequests.id, { onDelete: "cascade" }),
+    tokenHash: varchar("token_hash", { length: 128 }).notNull().unique(),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("document_share_tokens_token_hash_idx").on(table.tokenHash),
+    index("document_share_tokens_document_id_idx").on(table.documentId),
+    index("document_share_tokens_invoice_request_id_idx").on(table.invoiceRequestId),
+  ]
+);
+
 export type Warehouse = typeof warehouses.$inferSelect;
 export type NewWarehouse = typeof warehouses.$inferInsert;
 export type Customer = typeof customers.$inferSelect;
@@ -379,4 +404,6 @@ export type Rectification = typeof rectifications.$inferSelect;
 export type NewRectification = typeof rectifications.$inferInsert;
 export type MigrationRecord = typeof migrationRecords.$inferSelect;
 export type NewMigrationRecord = typeof migrationRecords.$inferInsert;
+export type DocumentShareToken = typeof documentShareTokens.$inferSelect;
+export type NewDocumentShareToken = typeof documentShareTokens.$inferInsert;
 

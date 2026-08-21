@@ -54,6 +54,7 @@ export async function runLocalMigrations(pgInstance: PGlite): Promise<void> {
     "0004_wet_mulholland_black.sql",
     "0005_uneven_lady_bullseye.sql",
     "0006_shallow_skaar.sql",
+    "0007_document_share_tokens.sql",
   ];
 
   for (const mFile of migrationFiles) {

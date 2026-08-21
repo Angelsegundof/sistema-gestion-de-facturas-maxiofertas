@@ -364,3 +364,12 @@ export interface MonthlyEvolutionItem {
   invoiceCount: number;
 }
 
+export interface SanitizedDocumentShareToken {
+  id: string;
+  documentId: string;
+  invoiceRequestId: string;
+  shareUrl: string;
+  expiresAt: string | null;
+  createdAt: string;
+}
+

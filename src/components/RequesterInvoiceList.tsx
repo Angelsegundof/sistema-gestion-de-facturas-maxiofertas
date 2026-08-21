@@ -1,0 +1,292 @@
+"use client";
+
+import React, { useState, useEffect } from "react";
+import Link from "next/link";
+import { SanitizedInvoiceRequest } from "@/domain/types";
+
+export default function RequesterInvoiceList() {
+  const [requests, setRequests] = useState<SanitizedInvoiceRequest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [sharingId, setSharingId] = useState<string | null>(null);
+  const [refreshIndex, setRefreshIndex] = useState(0);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function load() {
+      try {
+        setLoading(true);
+        setError(null);
+        const res = await fetch("/api/v1/invoice-requests/mine?pageSize=50");
+        const data = await res.json();
+        if (!isMounted) return;
+        if (data.success && data.data?.requests) {
+          setRequests(data.data.requests);
+        } else {
+          setError(data.error?.message || "No se pudieron cargar tus solicitudes.");
+        }
+      } catch {
+        if (isMounted) setError("Error de red al consultar solicitudes.");
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      isMounted = false;
+    };
+  }, [refreshIndex]);
+
+  const handleRefresh = () => {
+    setRefreshIndex((prev) => prev + 1);
+  };
+
+  const handleCopyShareLink = async (requestId: string, documentId?: string) => {
+    if (!documentId) return;
+    setSharingId(requestId);
+    try {
+      const res = await fetch(`/api/v1/documents/${documentId}/share`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (data.success && data.data?.shareUrl) {
+        await navigator.clipboard.writeText(data.data.shareUrl);
+        setCopiedId(requestId);
+        setTimeout(() => setCopiedId(null), 3000);
+      }
+    } catch (err) {
+      console.error("Error generating share link:", err);
+    } finally {
+      setSharingId(null);
+    }
+  };
+
+  const getStatusInfo = (req: SanitizedInvoiceRequest) => {
+    const activeRect = req.activeRectification;
+
+    if (activeRect) {
+      if (activeRect.status === "REQUESTED") {
+        return {
+          label: "Cambio solicitado",
+          bg: "bg-purple-100 text-purple-800 border-purple-200",
+          actionType: "RECT_PENDING",
+        };
+      }
+      if (
+        activeRect.status === "IN_PROGRESS" ||
+        activeRect.status === "CREDIT_NOTE_REGISTERED" ||
+        activeRect.status === "NEW_INVOICE_PENDING"
+      ) {
+        return {
+          label: "Corrigiendo factura",
+          bg: "bg-blue-100 text-blue-800 border-blue-200",
+          actionType: "RECT_IN_PROGRESS",
+        };
+      }
+      if (activeRect.status === "COMPLETED") {
+        return {
+          label: "Factura corregida",
+          bg: "bg-emerald-100 text-emerald-800 border-emerald-200",
+          actionType: "RECT_COMPLETED",
+        };
+      }
+    }
+
+    switch (req.status) {
+      case "PENDING":
+        return {
+          label: "Pendiente",
+          bg: "bg-amber-100 text-amber-800 border-amber-200",
+          actionType: "PENDING",
+        };
+      case "IN_PROGRESS":
+        return {
+          label: "En proceso",
+          bg: "bg-blue-100 text-blue-800 border-blue-200",
+          actionType: "IN_PROGRESS",
+        };
+      case "NEEDS_CORRECTION":
+        return {
+          label: "Debe corregir",
+          bg: "bg-rose-100 text-rose-800 border-rose-200",
+          actionType: "NEEDS_CORRECTION",
+        };
+      case "COMPLETED":
+        return {
+          label: "Factura lista",
+          bg: "bg-emerald-100 text-emerald-800 border-emerald-200",
+          actionType: "COMPLETED",
+        };
+      default:
+        return {
+          label: req.status,
+          bg: "bg-slate-100 text-slate-800 border-slate-200",
+          actionType: "DEFAULT",
+        };
+    }
+  };
+
+  return (
+    <section className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+        <div>
+          <h2 className="text-base font-extrabold text-slate-900">Mis Facturas y Solicitudes</h2>
+          <p className="text-xs text-slate-500">
+            Consulta el estado de tus solicitudes y copia el enlace de facturas listas para enviar a clientes.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleRefresh}
+            disabled={loading}
+            className="py-1.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition"
+          >
+            ↻ Actualizar
+          </button>
+          <Link
+            href="/solicitar"
+            className="py-1.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-sm transition"
+          >
+            + Nueva solicitud
+          </Link>
+        </div>
+      </div>
+
+      {error && (
+        <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 font-semibold">
+          {error}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="py-12 text-center text-xs text-slate-500">
+          <div className="w-8 h-8 border-3 border-slate-300 border-t-emerald-600 rounded-full animate-spin mx-auto mb-2" />
+          Cargando tus solicitudes...
+        </div>
+      ) : requests.length === 0 ? (
+        <div className="py-12 text-center text-xs text-slate-500 space-y-2">
+          <p className="font-semibold text-slate-700">Aún no has creado ninguna solicitud de factura.</p>
+          <Link
+            href="/solicitar"
+            className="inline-block py-2 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-sm transition"
+          >
+            Crear mi primera solicitud →
+          </Link>
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs text-left">
+            <thead className="bg-slate-50 text-slate-700 font-bold uppercase border-b border-slate-200">
+              <tr>
+                <th className="py-3 px-4">Razón Social</th>
+                <th className="py-3 px-4">RUT</th>
+                <th className="py-3 px-4">Estado</th>
+                <th className="py-3 px-4 text-right">Acción</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {requests.map((req) => {
+                const statusInfo = getStatusInfo(req);
+                const isCopied = copiedId === req.id;
+                const isSharing = sharingId === req.id;
+
+                return (
+                  <tr key={req.id} className="hover:bg-slate-50/70 transition">
+                    {/* Razón Social */}
+                    <td className="py-3.5 px-4">
+                      <div className="font-bold text-slate-900 line-clamp-1">{req.customerLegalNameSnapshot}</div>
+                      <div className="text-[11px] font-mono text-slate-400 mt-0.5">{req.requestNumber}</div>
+                    </td>
+
+                    {/* RUT */}
+                    <td className="py-3.5 px-4 font-mono font-semibold text-slate-800">
+                      {req.customerRutSnapshot}
+                    </td>
+
+                    {/* Estado */}
+                    <td className="py-3.5 px-4">
+                      <span
+                        className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold border ${statusInfo.bg}`}
+                      >
+                        {statusInfo.label}
+                      </span>
+                    </td>
+
+                    {/* Acción */}
+                    <td className="py-3.5 px-4 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        {statusInfo.actionType === "NEEDS_CORRECTION" ? (
+                          <Link
+                            href={`/requests/${req.id}/corregir`}
+                            className="py-1.5 px-3 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-lg shadow-sm transition"
+                          >
+                            Corregir
+                          </Link>
+                        ) : statusInfo.actionType === "COMPLETED" ? (
+                          <>
+                            <Link
+                              href={`/requests/${req.id}`}
+                              className="py-1.5 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg transition"
+                            >
+                              Ver factura
+                            </Link>
+
+                            {req.document && (
+                              <button
+                                type="button"
+                                onClick={() => handleCopyShareLink(req.id, req.document?.id)}
+                                disabled={isSharing}
+                                className={`py-1.5 px-2.5 font-bold rounded-lg transition shadow-xs ${
+                                  isCopied
+                                    ? "bg-emerald-600 text-white"
+                                    : "bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300"
+                                }`}
+                                title="Copiar enlace público seguro para enviar por WhatsApp"
+                              >
+                                {isCopied ? "✓ Enlace copiado" : isSharing ? "Generando..." : "Copiar enlace"}
+                              </button>
+                            )}
+
+                            <Link
+                              href={`/requests/${req.id}`}
+                              className="py-1.5 px-2.5 text-slate-500 hover:text-slate-800 font-semibold rounded-lg transition"
+                            >
+                              Solicitar cambio
+                            </Link>
+                          </>
+                        ) : statusInfo.actionType === "RECT_PENDING" ||
+                          statusInfo.actionType === "RECT_IN_PROGRESS" ? (
+                          <Link
+                            href={`/requests/${req.id}`}
+                            className="py-1.5 px-3 bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 font-bold rounded-lg transition"
+                          >
+                            Ver estado
+                          </Link>
+                        ) : statusInfo.actionType === "RECT_COMPLETED" ? (
+                          <Link
+                            href={`/requests/${req.id}`}
+                            className="py-1.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg shadow-sm transition"
+                          >
+                            Ver factura corregida
+                          </Link>
+                        ) : (
+                          <Link
+                            href={`/requests/${req.id}`}
+                            className="py-1.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg transition"
+                          >
+                            Ver
+                          </Link>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}

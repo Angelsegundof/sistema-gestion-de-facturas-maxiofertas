@@ -202,7 +202,7 @@ export async function GET(request: NextRequest) {
 
     let counters: QueueSummaryCounters | undefined = undefined;
     if (includeCounters) {
-      counters = await getQueueCountersService();
+      counters = await getQueueCountersService(warehouseIdParam);
     }
 
     return NextResponse.json<

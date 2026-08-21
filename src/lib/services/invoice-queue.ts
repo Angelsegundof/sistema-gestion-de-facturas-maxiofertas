@@ -59,8 +59,11 @@ export function computeAgeIndicator(createdAt: Date | string): AgeIndicator {
   };
 }
 
-export async function getQueueCountersService(): Promise<QueueSummaryCounters> {
-  const db = getDb();
+export async function getQueueCountersService(
+  warehouseId?: string,
+  dbOverride?: unknown
+): Promise<QueueSummaryCounters> {
+  const db = (dbOverride as ReturnType<typeof getDb>) || getDb();
   if (!db) {
     throw new Error("Base de datos no disponible.");
   }
@@ -68,36 +71,50 @@ export async function getQueueCountersService(): Promise<QueueSummaryCounters> {
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
 
+  const pendingConds = [eq(invoiceRequests.status, "PENDING")];
+  const inProgressConds = [eq(invoiceRequests.status, "IN_PROGRESS")];
+  const needsCorrectionConds = [eq(invoiceRequests.status, "NEEDS_CORRECTION")];
+  const completedTodayConds = [
+    eq(invoiceRequests.status, "COMPLETED"),
+    sql`${invoiceRequests.completedAt} >= ${todayStart}`,
+  ];
+
+  if (warehouseId) {
+    pendingConds.push(eq(invoiceRequests.warehouseId, warehouseId));
+    inProgressConds.push(eq(invoiceRequests.warehouseId, warehouseId));
+    needsCorrectionConds.push(eq(invoiceRequests.warehouseId, warehouseId));
+    completedTodayConds.push(eq(invoiceRequests.warehouseId, warehouseId));
+  }
+
   const [pendingRes] = await db
     .select({ count: count() })
     .from(invoiceRequests)
-    .where(eq(invoiceRequests.status, "PENDING"));
+    .where(and(...pendingConds));
 
   const [inProgressRes] = await db
     .select({ count: count() })
     .from(invoiceRequests)
-    .where(eq(invoiceRequests.status, "IN_PROGRESS"));
+    .where(and(...inProgressConds));
 
   const [needsCorrectionRes] = await db
     .select({ count: count() })
     .from(invoiceRequests)
-    .where(eq(invoiceRequests.status, "NEEDS_CORRECTION"));
+    .where(and(...needsCorrectionConds));
 
   const [completedTodayRes] = await db
     .select({ count: count() })
     .from(invoiceRequests)
-    .where(
-      and(
-        eq(invoiceRequests.status, "COMPLETED"),
-        sql`${invoiceRequests.completedAt} >= ${todayStart}`
-      )
-    );
+    .where(and(...completedTodayConds));
 
   const [changesRequestedRes] = await db
     .select({ count: count() })
     .from(rectifications)
+    .leftJoin(invoiceRequests, eq(rectifications.invoiceRequestId, invoiceRequests.id))
     .where(
-      sql`${rectifications.status} IN ('REQUESTED', 'IN_PROGRESS', 'CREDIT_NOTE_REGISTERED', 'NEW_INVOICE_PENDING')`
+      and(
+        sql`${rectifications.status} IN ('REQUESTED', 'IN_PROGRESS', 'CREDIT_NOTE_REGISTERED', 'NEW_INVOICE_PENDING')`,
+        warehouseId ? eq(invoiceRequests.warehouseId, warehouseId) : sql`1=1`
+      )
     );
 
   return {

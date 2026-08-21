@@ -32,7 +32,8 @@ export type AuditAction =
   | "RECTIFICATION_ASSIGNED"
   | "CREDIT_NOTE_REGISTERED"
   | "REPLACEMENT_INVOICE_UPLOADED"
-  | "RECTIFICATION_COMPLETED";
+  | "RECTIFICATION_COMPLETED"
+  | "DOCUMENT_SHARE_TOKEN_CREATED";
 
 export interface LogAuditParams {
   userId?: string | null;

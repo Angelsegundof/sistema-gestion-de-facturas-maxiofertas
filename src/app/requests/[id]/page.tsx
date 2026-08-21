@@ -38,6 +38,28 @@ export default function ViewInvoiceRequestPage() {
   const [submittingRect, setSubmittingRect] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [isCopied, setIsCopied] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
+
+  const handleCopyShareLink = async () => {
+    if (!requestData?.document?.id) return;
+    setIsSharing(true);
+    try {
+      const res = await fetch(`/api/v1/documents/${requestData.document.id}/share`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (data.success && data.data?.shareUrl) {
+        await navigator.clipboard.writeText(data.data.shareUrl);
+        setIsCopied(true);
+        setTimeout(() => setIsCopied(false), 3000);
+      }
+    } catch (err) {
+      console.error("Error generating share link:", err);
+    } finally {
+      setIsSharing(false);
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -219,17 +241,33 @@ export default function ViewInvoiceRequestPage() {
               Esta factura fue emitida por el equipo de facturación. Puedes visualizar o descargar el PDF oficial.
             </p>
 
-            {requestData.document?.accessUrl && (
+            {requestData.document && (
               <div className="pt-1 flex flex-col sm:flex-row gap-3">
-                <a
-                  href={requestData.document.accessUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 py-2.5 px-5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl shadow-sm transition"
+                {requestData.document.accessUrl && (
+                  <a
+                    href={requestData.document.accessUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center gap-2 py-2.5 px-5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl shadow-sm transition"
+                  >
+                    <span>📄</span>
+                    <span>Ver factura emitida (PDF)</span>
+                  </a>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleCopyShareLink}
+                  disabled={isSharing}
+                  className={`inline-flex items-center justify-center gap-2 py-2.5 px-5 text-xs font-bold rounded-xl transition shadow-sm ${
+                    isCopied
+                      ? "bg-emerald-600 text-white"
+                      : "bg-white hover:bg-slate-50 text-emerald-900 border border-emerald-300"
+                  }`}
                 >
-                  <span>📄</span>
-                  <span>Ver factura emitida (PDF)</span>
-                </a>
+                  <span>🔗</span>
+                  <span>{isCopied ? "✓ Enlace copiado" : isSharing ? "Generando enlace..." : "Copiar enlace para WhatsApp"}</span>
+                </button>
               </div>
             )}
           </div>

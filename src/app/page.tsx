@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getServerSession } from "@/lib/auth";
 import LogoutButton from "@/components/LogoutButton";
+import RequesterInvoiceList from "@/components/RequesterInvoiceList";
 import { Role } from "@/domain/types";
 
 const ROLE_LABELS: Record<Role, string> = {
@@ -37,7 +38,7 @@ export default async function HomePage() {
             <p className="font-semibold text-slate-800 mb-1">Estado de Seguridad y Acceso:</p>
             <ul className="list-disc pl-4 space-y-1">
               <li>Autenticación propia mediante sesiones server-side e HttpOnly cookies.</li>
-              <li>Autorizaci?n basada en roles con política Default Deny.</li>
+              <li>Autorización basada en roles con política Default Deny.</li>
               <li>Auditoría transaccional de accesos e identidades.</li>
             </ul>
           </div>
@@ -55,8 +56,8 @@ export default async function HomePage() {
   const { user } = sessionResult;
 
   return (
-    <main className="min-h-screen bg-slate-50 p-6">
-      <div className="max-w-4xl mx-auto space-y-6">
+    <main className="min-h-screen bg-slate-50 p-4 sm:p-8">
+      <div className="max-w-5xl mx-auto space-y-6">
         <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-6 bg-white rounded-2xl border border-slate-200 shadow-sm">
           <div className="flex items-center gap-4">
             <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-blue-600 text-white font-bold text-xl shadow-sm">
@@ -67,7 +68,7 @@ export default async function HomePage() {
                 Sistema de Gestión de Facturas
               </h1>
               <p className="text-xs text-slate-500">
-                Maxiofertas ? Sesión Autenticada
+                Maxiofertas • Sesión Autenticada
               </p>
             </div>
           </div>
@@ -86,42 +87,70 @@ export default async function HomePage() {
           <section className="p-6 bg-gradient-to-r from-blue-900 to-indigo-950 text-white rounded-2xl shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
               <span className="text-xs font-bold uppercase tracking-wider text-blue-300">
-                Módulo Operacional ? Fase 5
+                Módulo Operacional
               </span>
-              <h2 className="text-xl font-bold mt-1">Cola de Facturación y Mesa de Trabajo</h2>
+              <h2 className="text-xl font-bold mt-1">Mesa de Facturación y Emisión</h2>
               <p className="text-xs text-slate-300 mt-1 max-w-md">
-                Consulta las facturas pendientes ordenadas por antig?edad (FIFO), toma solicitudes y gestiona observaciones.
+                Consulta las facturas pendientes ordenadas por antigüedad (FIFO), toma solicitudes y gestiona rectificaciones.
               </p>
             </div>
             <Link
               href="/gestion"
-              className="inline-flex items-center justify-center py-3 px-6 bg-blue-500 hover:bg-blue-600 text-white font-bold text-sm rounded-xl shadow-md transition"
+              className="inline-flex items-center justify-center py-3 px-6 bg-blue-500 hover:bg-blue-600 text-white font-bold text-sm rounded-xl shadow-md transition shrink-0"
             >
-              ?? Ir a Gestión de Facturas
+              Ir a Gestión de Facturas →
             </Link>
           </section>
         )}
 
-        {(user.role === "WAREHOUSE_USER" || user.role === "ADMIN") && (
-          <section className="p-6 bg-gradient-to-r from-slate-900 to-emerald-950 text-white rounded-2xl shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        {/* Módulo Estadísticas para Management y Admin */}
+        {(user.role === "MANAGEMENT" || user.role === "ADMIN") && (
+          <section className="p-6 bg-gradient-to-r from-purple-900 to-slate-900 text-white rounded-2xl shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
-              <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
-                Módulo Solicitante
+              <span className="text-xs font-bold uppercase tracking-wider text-purple-300">
+                Módulo Gerencial
               </span>
-              <h2 className="text-xl font-bold mt-1">Crear Solicitud de Factura</h2>
+              <h2 className="text-xl font-bold mt-1">Estadísticas y Facturación Vigente</h2>
               <p className="text-xs text-slate-300 mt-1 max-w-md">
-                Ingresa los datos del cliente y productos con precios IVA incluido para enviar a facturación.
+                Facturado vigente, base imponible neta, IVA débito estimado, ticket promedio y distribución por bodega.
               </p>
             </div>
             <Link
-              href="/solicitar"
-              className="inline-flex items-center justify-center py-3 px-6 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm rounded-xl shadow-md transition"
+              href="/estadisticas"
+              className="inline-flex items-center justify-center py-3 px-6 bg-purple-500 hover:bg-purple-600 text-white font-bold text-sm rounded-xl shadow-md transition shrink-0"
             >
-              + Solicitar factura
+              📊 Ver Estadísticas →
             </Link>
           </section>
         )}
 
+        {/* Módulo Solicitante (Crear Solicitud + Listado de Facturas) */}
+        {(user.role === "WAREHOUSE_USER" || user.role === "ADMIN") && (
+          <div className="space-y-6">
+            <section className="p-6 bg-gradient-to-r from-slate-900 to-emerald-950 text-white rounded-2xl shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div>
+                <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
+                  Módulo Solicitante
+                </span>
+                <h2 className="text-xl font-bold mt-1">Crear Solicitud de Factura</h2>
+                <p className="text-xs text-slate-300 mt-1 max-w-md">
+                  Ingresa los datos del cliente y productos con precios IVA incluido para enviar a facturación.
+                </p>
+              </div>
+              <Link
+                href="/solicitar"
+                className="inline-flex items-center justify-center py-3 px-6 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm rounded-xl shadow-md transition shrink-0"
+              >
+                + Solicitar factura
+              </Link>
+            </section>
+
+            {/* Listado de Facturas del Solicitante (QA-006) */}
+            <RequesterInvoiceList />
+          </div>
+        )}
+
+        {/* Perfil del Usuario */}
         <section className="p-6 bg-white rounded-2xl border border-slate-200 shadow-sm space-y-4">
           <h2 className="text-base font-bold text-slate-800">
             Perfil de Usuario Autenticado

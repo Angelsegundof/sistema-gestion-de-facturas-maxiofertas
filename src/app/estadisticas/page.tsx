@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
@@ -166,10 +166,17 @@ export default function EstadisticasPage() {
             <div>
               <div className="flex items-center gap-2">
                 <Link
+                  href="/"
+                  className="text-xs font-bold text-slate-500 hover:text-slate-900 transition"
+                >
+                  ← Inicio
+                </Link>
+                <span className="text-slate-300">/</span>
+                <Link
                   href="/gestion"
                   className="text-xs font-bold text-slate-500 hover:text-slate-900 transition"
                 >
-                  ← Cola de Facturación
+                  Cola de Facturación
                 </Link>
                 <span className="text-slate-300">/</span>
                 <span className="text-xs font-bold text-blue-600 uppercase tracking-wider">
