@@ -20,11 +20,11 @@ import { calculateNetPrice, DEFAULT_VAT_RATE_PERCENT } from "../../domain/pricin
 
 export const QA_PASSWORD_PLAIN = "QA_password123!";
 
-export async function seedQa() {
-  const db = getDb();
+export async function seedQa(dbOverride?: any) {
+  const db = dbOverride || getDb();
   if (!db) {
     console.error("[ERROR] DATABASE_URL no está configurada.");
-    process.exit(1);
+    return;
   }
 
   if ((global as any).__localPgliteInstance) {

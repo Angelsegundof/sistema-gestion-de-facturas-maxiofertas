@@ -11,6 +11,13 @@ import * as path from "path";
 declare global {
   var __localPgliteDb: PgliteDatabase<typeof schema> | undefined;
   var __localPgliteInstance: PGlite | undefined;
+  var __localPgliteReadyPromise: Promise<void> | undefined;
+}
+
+export async function ensureDbReady(): Promise<void> {
+  if (global.__localPgliteReadyPromise) {
+    await global.__localPgliteReadyPromise;
+  }
 }
 
 function initLocalPglite(): PgliteDatabase<typeof schema> {
@@ -18,37 +25,23 @@ function initLocalPglite(): PgliteDatabase<typeof schema> {
     return global.__localPgliteDb;
   }
 
-  const isTest = process.env.NODE_ENV === "test" || Boolean(process.env.VITEST);
-  let pglite: PGlite;
-
-  if (isTest) {
-    pglite = new PGlite();
-  } else {
-    const dataDir = path.resolve(process.cwd(), ".data/local_qa");
-    try {
-      if (!fs.existsSync(dataDir)) {
-        fs.mkdirSync(dataDir, { recursive: true });
-      }
-      pglite = new PGlite(dataDir);
-    } catch {
-      // If corrupted or locked, fallback to clean recreation or memory
-      try {
-        fs.rmSync(dataDir, { recursive: true, force: true });
-        fs.mkdirSync(dataDir, { recursive: true });
-        pglite = new PGlite(dataDir);
-      } catch {
-        pglite = new PGlite();
-      }
-    }
-  }
-
+  // Use fast, lock-free in-memory PGlite for local development and tests
+  const pglite = new PGlite();
   global.__localPgliteInstance = pglite;
   const localDb = drizzlePglite(pglite, { schema });
   global.__localPgliteDb = localDb;
 
-  // Run migrations in background for development
+  // Auto-run migrations and seed QA data on startup for development
   if (process.env.NODE_ENV === "development") {
-    runLocalMigrations(pglite).catch(() => {});
+    global.__localPgliteReadyPromise = (async () => {
+      try {
+        await runLocalMigrations(pglite);
+        const { seedQa } = await import("./seed-qa");
+        await seedQa(localDb);
+      } catch (err) {
+        console.error("[DEV DB INIT ERROR]", err);
+      }
+    })();
   }
 
   return localDb;
@@ -105,4 +98,3 @@ export function getDb(): AppDatabase | null {
 
 export const db = getDb();
 export * from "./schema";
-

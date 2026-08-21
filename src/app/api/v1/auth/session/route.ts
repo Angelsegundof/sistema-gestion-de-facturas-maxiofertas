@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
+import { ensureDbReady } from "@/lib/db";
 import { getServerSession } from "@/lib/auth";
 import { ApiResponse, SanitizedUser } from "@/types";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  await ensureDbReady();
   const sessionResult = await getServerSession();
 
   if (!sessionResult || !sessionResult.user.active) {

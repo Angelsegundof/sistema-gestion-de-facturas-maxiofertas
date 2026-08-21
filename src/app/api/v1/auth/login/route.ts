@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
-import { getDb } from "@/lib/db";
+import { getDb, ensureDbReady } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import {
   authRateLimiter,
@@ -19,6 +19,7 @@ const loginSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
+  await ensureDbReady();
   // 1. Verificación CSRF / Same-Origin
   const csrfCheck = verifyCsrfOrigin(request);
   if (!csrfCheck.valid) {
