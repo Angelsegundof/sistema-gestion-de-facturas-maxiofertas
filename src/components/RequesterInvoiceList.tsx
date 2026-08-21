@@ -3,12 +3,14 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { SanitizedInvoiceRequest } from "@/domain/types";
+import { formatWhatsAppInvoiceMessage } from "@/domain/whatsapp";
 
 export default function RequesterInvoiceList() {
   const [requests, setRequests] = useState<SanitizedInvoiceRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
+  const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
   const [sharingId, setSharingId] = useState<string | null>(null);
   const [refreshIndex, setRefreshIndex] = useState(0);
 
@@ -42,21 +44,51 @@ export default function RequesterInvoiceList() {
     setRefreshIndex((prev) => prev + 1);
   };
 
-  const handleCopyShareLink = async (requestId: string, documentId?: string) => {
+  const getOrFetchShareUrl = async (documentId: string): Promise<string | null> => {
+    const res = await fetch(`/api/v1/documents/${documentId}/share`, {
+      method: "POST",
+    });
+    const data = await res.json();
+    if (data.success && data.data?.shareUrl) {
+      return data.data.shareUrl;
+    }
+    return null;
+  };
+
+  const handleCopyLink = async (requestId: string, documentId?: string) => {
     if (!documentId) return;
     setSharingId(requestId);
     try {
-      const res = await fetch(`/api/v1/documents/${documentId}/share`, {
-        method: "POST",
-      });
-      const data = await res.json();
-      if (data.success && data.data?.shareUrl) {
-        await navigator.clipboard.writeText(data.data.shareUrl);
-        setCopiedId(requestId);
-        setTimeout(() => setCopiedId(null), 3000);
+      const shareUrl = await getOrFetchShareUrl(documentId);
+      if (shareUrl) {
+        await navigator.clipboard.writeText(shareUrl);
+        setCopiedLinkId(requestId);
+        setTimeout(() => setCopiedLinkId(null), 3000);
       }
     } catch (err) {
-      console.error("Error generating share link:", err);
+      console.error("Error al copiar enlace:", err);
+    } finally {
+      setSharingId(null);
+    }
+  };
+
+  const handleCopyMessage = async (
+    requestId: string,
+    customerName: string,
+    documentId?: string
+  ) => {
+    if (!documentId) return;
+    setSharingId(requestId);
+    try {
+      const shareUrl = await getOrFetchShareUrl(documentId);
+      if (shareUrl) {
+        const msg = formatWhatsAppInvoiceMessage(customerName, shareUrl);
+        await navigator.clipboard.writeText(msg);
+        setCopiedMsgId(requestId);
+        setTimeout(() => setCopiedMsgId(null), 3000);
+      }
+    } catch (err) {
+      console.error("Error al copiar mensaje WhatsApp:", err);
     } finally {
       setSharingId(null);
     }
@@ -133,7 +165,7 @@ export default function RequesterInvoiceList() {
         <div>
           <h2 className="text-base font-extrabold text-slate-900">Mis Facturas y Solicitudes</h2>
           <p className="text-xs text-slate-500">
-            Consulta el estado de tus solicitudes y copia el enlace de facturas listas para enviar a clientes.
+            Consulta el estado de tus solicitudes y copia el enlace o mensaje listo para WhatsApp de facturas emitidas.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -188,7 +220,8 @@ export default function RequesterInvoiceList() {
             <tbody className="divide-y divide-slate-100">
               {requests.map((req) => {
                 const statusInfo = getStatusInfo(req);
-                const isCopied = copiedId === req.id;
+                const isLinkCopied = copiedLinkId === req.id;
+                const isMsgCopied = copiedMsgId === req.id;
                 const isSharing = sharingId === req.id;
 
                 return (
@@ -225,27 +258,60 @@ export default function RequesterInvoiceList() {
                           </Link>
                         ) : statusInfo.actionType === "COMPLETED" ? (
                           <>
-                            <Link
-                              href={`/requests/${req.id}`}
-                              className="py-1.5 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg transition"
-                            >
-                              Ver factura
-                            </Link>
+                            {req.document ? (
+                              <a
+                                href={`/api/v1/documents/${req.document.id}/access?stream=true`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="py-1.5 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg transition"
+                              >
+                                Ver factura
+                              </a>
+                            ) : (
+                              <Link
+                                href={`/requests/${req.id}`}
+                                className="py-1.5 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg transition"
+                              >
+                                Ver
+                              </Link>
+                            )}
 
                             {req.document && (
-                              <button
-                                type="button"
-                                onClick={() => handleCopyShareLink(req.id, req.document?.id)}
-                                disabled={isSharing}
-                                className={`py-1.5 px-2.5 font-bold rounded-lg transition shadow-xs ${
-                                  isCopied
-                                    ? "bg-emerald-600 text-white"
-                                    : "bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300"
-                                }`}
-                                title="Copiar enlace público seguro para enviar por WhatsApp"
-                              >
-                                {isCopied ? "✓ Enlace copiado" : isSharing ? "Generando..." : "Copiar enlace"}
-                              </button>
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopyLink(req.id, req.document?.id)}
+                                  disabled={isSharing}
+                                  className={`py-1.5 px-2.5 font-bold rounded-lg transition shadow-xs ${
+                                    isLinkCopied
+                                      ? "bg-emerald-600 text-white"
+                                      : "bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-300"
+                                  }`}
+                                  title="Copiar enlace directo de factura"
+                                >
+                                  {isLinkCopied ? "✓ Enlace copiado" : "Copiar enlace"}
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleCopyMessage(
+                                      req.id,
+                                      req.customerLegalNameSnapshot,
+                                      req.document?.id
+                                    )
+                                  }
+                                  disabled={isSharing}
+                                  className={`py-1.5 px-2.5 font-bold rounded-lg transition shadow-xs ${
+                                    isMsgCopied
+                                      ? "bg-emerald-600 text-white"
+                                      : "bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300"
+                                  }`}
+                                  title="Copiar mensaje preparado para WhatsApp"
+                                >
+                                  {isMsgCopied ? "✓ Mensaje copiado" : isSharing ? "Generando..." : "Copiar mensaje"}
+                                </button>
+                              </>
                             )}
 
                             <Link

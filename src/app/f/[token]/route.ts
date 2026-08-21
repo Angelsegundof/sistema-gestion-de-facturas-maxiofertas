@@ -17,8 +17,20 @@ export async function GET(
       return NextResponse.redirect(supersededUrl);
     }
 
-    // Active invoice: Redirect to secure short-lived presigned R2 URL
-    return NextResponse.redirect(result.accessUrl, { status: 302 });
+    // Active invoice: Stream PDF directly to browser inline (Opción A)
+    const uint8Array =
+      result.pdfData instanceof Uint8Array ? result.pdfData : new Uint8Array(result.pdfData);
+    const bodyBuffer = Buffer.from(uint8Array);
+
+    return new NextResponse(bodyBuffer, {
+      status: 200,
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `inline; filename="${encodeURIComponent(result.fileName || "factura.pdf")}"`,
+        "Content-Length": bodyBuffer.byteLength.toString(),
+        "Cache-Control": "private, no-cache, no-store, must-revalidate",
+      },
+    });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Enlace no válido";
 

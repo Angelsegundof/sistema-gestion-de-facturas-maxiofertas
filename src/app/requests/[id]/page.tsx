@@ -10,6 +10,7 @@ import {
   InvoiceTimelineEvent,
   RectificationReason,
 } from "@/domain/types";
+import { formatWhatsAppInvoiceMessage } from "@/domain/whatsapp";
 
 const REASON_OPTIONS: { value: RectificationReason; label: string }[] = [
   { value: "RUT", label: "RUT del cliente incorrecto" },
@@ -38,27 +39,51 @@ export default function ViewInvoiceRequestPage() {
   const [submittingRect, setSubmittingRect] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
-  const [isCopied, setIsCopied] = useState(false);
+  const [isLinkCopied, setIsLinkCopied] = useState(false);
+  const [isMsgCopied, setIsMsgCopied] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
 
-  const handleCopyShareLink = async () => {
-    if (!requestData?.document?.id) return;
-    setIsSharing(true);
+  const getOrFetchShareUrl = async (): Promise<string | null> => {
+    if (!requestData?.document?.id) return null;
     try {
       const res = await fetch(`/api/v1/documents/${requestData.document.id}/share`, {
         method: "POST",
       });
       const data = await res.json();
       if (data.success && data.data?.shareUrl) {
-        await navigator.clipboard.writeText(data.data.shareUrl);
-        setIsCopied(true);
-        setTimeout(() => setIsCopied(false), 3000);
+        return data.data.shareUrl;
       }
     } catch (err) {
       console.error("Error generating share link:", err);
-    } finally {
-      setIsSharing(false);
     }
+    return null;
+  };
+
+  const handleCopyShareLink = async () => {
+    setIsSharing(true);
+    const shareUrl = await getOrFetchShareUrl();
+    if (shareUrl) {
+      await navigator.clipboard.writeText(shareUrl);
+      setIsLinkCopied(true);
+      setTimeout(() => setIsLinkCopied(false), 3000);
+    }
+    setIsSharing(false);
+  };
+
+  const handleCopyWhatsAppMessage = async () => {
+    if (!requestData) return;
+    setIsSharing(true);
+    const shareUrl = await getOrFetchShareUrl();
+    if (shareUrl) {
+      const msg = formatWhatsAppInvoiceMessage(
+        requestData.customerLegalNameSnapshot,
+        shareUrl
+      );
+      await navigator.clipboard.writeText(msg);
+      setIsMsgCopied(true);
+      setTimeout(() => setIsMsgCopied(false), 3000);
+    }
+    setIsSharing(false);
   };
 
   useEffect(() => {
@@ -259,14 +284,28 @@ export default function ViewInvoiceRequestPage() {
                   type="button"
                   onClick={handleCopyShareLink}
                   disabled={isSharing}
-                  className={`inline-flex items-center justify-center gap-2 py-2.5 px-5 text-xs font-bold rounded-xl transition shadow-sm ${
-                    isCopied
+                  className={`inline-flex items-center justify-center gap-2 py-2.5 px-4 text-xs font-bold rounded-xl transition shadow-sm ${
+                    isLinkCopied
                       ? "bg-emerald-600 text-white"
-                      : "bg-white hover:bg-slate-50 text-emerald-900 border border-emerald-300"
+                      : "bg-white hover:bg-slate-50 text-slate-700 border border-slate-300"
                   }`}
                 >
                   <span>🔗</span>
-                  <span>{isCopied ? "✓ Enlace copiado" : isSharing ? "Generando enlace..." : "Copiar enlace para WhatsApp"}</span>
+                  <span>{isLinkCopied ? "✓ Enlace copiado" : "Copiar enlace"}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleCopyWhatsAppMessage}
+                  disabled={isSharing}
+                  className={`inline-flex items-center justify-center gap-2 py-2.5 px-4 text-xs font-bold rounded-xl transition shadow-sm ${
+                    isMsgCopied
+                      ? "bg-emerald-600 text-white"
+                      : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                  }`}
+                >
+                  <span>💬</span>
+                  <span>{isMsgCopied ? "✓ Mensaje copiado" : isSharing ? "Generando..." : "Copiar mensaje WhatsApp"}</span>
                 </button>
               </div>
             )}

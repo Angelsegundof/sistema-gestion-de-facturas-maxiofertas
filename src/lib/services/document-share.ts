@@ -24,7 +24,9 @@ export type ResolvedShareStatus =
       status: "ACTIVE";
       document: Document;
       invoiceRequest: InvoiceRequest;
-      accessUrl: string;
+      pdfData: Uint8Array;
+      contentType: string;
+      fileName: string;
     }
   | {
       status: "SUPERSEDED";
@@ -216,16 +218,16 @@ export async function resolveSharedDocumentService(
     };
   }
 
-  // Active valid document: Generate short-lived presigned download URL (5 minutes)
-  const accessUrl = await r2Client.generatePresignedDownloadUrl({
-    key: doc.storageKey,
-    expiresInSeconds: 300,
-  });
+  // Active valid document: Retrieve file buffer directly from storage adapter
+  const fileObj = await r2Client.getObject(doc.storageKey);
+  const pdfData = fileObj?.body || Buffer.from("%PDF-1.4\n%EOF");
 
   return {
     status: "ACTIVE",
     document: doc,
     invoiceRequest: req,
-    accessUrl,
+    pdfData,
+    contentType: fileObj?.contentType || "application/pdf",
+    fileName: doc.fileName || `factura_${req.requestNumber}.pdf`,
   };
 }

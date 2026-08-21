@@ -237,10 +237,12 @@ export async function uploadInvoiceDocumentService(
     ipAddress,
   });
 
-  const accessUrl = await r2Client.generatePresignedDownloadUrl({
-    key: insertedDoc.storageKey,
-    expiresInSeconds: 900,
-  });
+  const accessUrl = r2Client.isConfigured()
+    ? await r2Client.generatePresignedDownloadUrl({
+        key: insertedDoc.storageKey,
+        expiresInSeconds: 900,
+      })
+    : `/api/v1/documents/${insertedDoc.id}/access?stream=true`;
 
   return sanitizeDocument(insertedDoc, accessUrl);
 }
@@ -427,10 +429,12 @@ export async function getInvoiceDocumentAccessService(
     }
   }
 
-  const accessUrl = await r2Client.generatePresignedDownloadUrl({
-    key: doc.storageKey,
-    expiresInSeconds: 900, // 15 min
-  });
+  const accessUrl = r2Client.isConfigured()
+    ? await r2Client.generatePresignedDownloadUrl({
+        key: doc.storageKey,
+        expiresInSeconds: 900, // 15 min
+      })
+    : `/api/v1/documents/${doc.id}/access?stream=true`;
 
   await logAuditEvent({
     userId: currentUser.id,

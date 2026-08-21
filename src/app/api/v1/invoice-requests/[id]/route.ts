@@ -160,10 +160,12 @@ export async function GET(
 
   if (docList.length > 0) {
     const activeDoc = docList.find((d) => !d.isVoided) || docList[0];
-    const accessUrl = await r2Client.generatePresignedDownloadUrl({
-      key: activeDoc.storageKey,
-      expiresInSeconds: 900,
-    });
+    const accessUrl = r2Client.isConfigured()
+      ? await r2Client.generatePresignedDownloadUrl({
+          key: activeDoc.storageKey,
+          expiresInSeconds: 900,
+        })
+      : `/api/v1/documents/${activeDoc.id}/access?stream=true`;
     sanitized.document = sanitizeDocument(activeDoc, accessUrl);
   }
 

@@ -8,6 +8,7 @@ import { getQueueCountersService } from "@/lib/services/invoice-queue";
 import { getStatisticsSummaryService } from "@/lib/services/statistics";
 import { hasPermission } from "@/domain/permissions";
 import { SanitizedUser } from "@/domain/types";
+import { formatWhatsAppInvoiceMessage } from "@/domain/whatsapp";
 import * as fs from "fs";
 import * as path from "path";
 import crypto from "crypto";
@@ -271,9 +272,20 @@ describe("Phase 10.1D QA Adjustments Integration Tests (Real PostgreSQL)", () =>
       expect(resolved.status).toBe("ACTIVE");
       if (resolved.status === "ACTIVE") {
         expect(resolved.document.id).toBe(doc.id);
-        expect(resolved.accessUrl).toBeDefined();
+        expect(resolved.pdfData).toBeDefined();
+        expect(resolved.contentType).toBe("application/pdf");
         expect(resolved.invoiceRequest.requestNumber).toBe("FAC-2026-000502");
       }
+    });
+
+    it("should format clean plain-text WhatsApp message", () => {
+      const msg = formatWhatsAppInvoiceMessage(
+        "Minera del Norte Ltda.",
+        "https://facturacion.maxiofertas.cl/f/testtoken123"
+      );
+      expect(msg).toBe(
+        "Estimado/a Minera del Norte Ltda., adjuntamos su factura.\n\nAgradecemos su preferencia.\n\nhttps://facturacion.maxiofertas.cl/f/testtoken123"
+      );
     });
 
     it("should safely reject non-existent or invalid share tokens", async () => {
