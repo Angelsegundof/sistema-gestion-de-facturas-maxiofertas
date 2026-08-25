@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
+import { eq, asc } from "drizzle-orm";
 import * as schema from "@/lib/db/schema";
 import { runLocalMigrations } from "@/lib/db";
 import { computeAgeIndicator, getQueueCountersService } from "@/lib/services/invoice-queue";
@@ -419,4 +420,143 @@ describe("FASE 10.1F — Temporal Metrics and Executor Management Statistics", (
       await expect(getExecutorStatisticsService(warehouseUser, {}, db)).rejects.toThrow("FORBIDDEN");
     });
   });
+
+  describe("F10.1G — Immutability of created_at and FIFO Queue ordering", () => {
+    it("should preserve created_at through all state transitions without resetting antiquity", async () => {
+      const fiveDaysAgo = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
+
+      // 1. Initial creation (PENDING)
+      const [req] = await db
+        .insert(schema.invoiceRequests)
+        .values({
+          requestNumber: "FAC-TRANS-001",
+          warehouseId: testWarehouseId,
+          customerId: testCustomerId,
+          customerRutSnapshot: "761234560",
+          customerLegalNameSnapshot: "Test Trans",
+          customerBusinessActivitySnapshot: "Venta al por mayor",
+          expectedGrossTotal: 150000,
+          status: "PENDING",
+          requestedBy: warehouseUser.id,
+          createdAt: fiveDaysAgo,
+        })
+        .returning();
+
+      expect(new Date(req.createdAt).toISOString()).toBe(fiveDaysAgo.toISOString());
+      let age = computeAgeIndicator(req.createdAt);
+      expect(age.displayAge).toBe("5 días");
+
+      // 2. Claim by executor (IN_PROGRESS)
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      const [claimed] = await db
+        .update(schema.invoiceRequests)
+        .set({
+          status: "IN_PROGRESS",
+          assignedTo: executorUser1.id,
+          assignedAt: oneHourAgo,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.invoiceRequests.id, req.id))
+        .returning();
+
+      expect(new Date(claimed.createdAt).toISOString()).toBe(fiveDaysAgo.toISOString());
+      age = computeAgeIndicator(claimed.createdAt);
+      expect(age.displayAge).toBe("5 días"); // Remains 5 days, NOT 1 hour!
+
+      // 3. Request correction (NEEDS_CORRECTION)
+      const [correctionRequested] = await db
+        .update(schema.invoiceRequests)
+        .set({
+          status: "NEEDS_CORRECTION",
+          assignedTo: null,
+          assignedAt: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.invoiceRequests.id, req.id))
+        .returning();
+
+      expect(new Date(correctionRequested.createdAt).toISOString()).toBe(fiveDaysAgo.toISOString());
+      age = computeAgeIndicator(correctionRequested.createdAt);
+      expect(age.displayAge).toBe("5 días");
+
+      // 4. Warehouse user corrects pre-invoice (PENDING again)
+      const [rePending] = await db
+        .update(schema.invoiceRequests)
+        .set({
+          status: "PENDING",
+          expectedGrossTotal: 160000,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.invoiceRequests.id, req.id))
+        .returning();
+
+      expect(new Date(rePending.createdAt).toISOString()).toBe(fiveDaysAgo.toISOString());
+      age = computeAgeIndicator(rePending.createdAt);
+      expect(age.displayAge).toBe("5 días");
+    });
+
+    it("should strictly order queue by created_at ASC (oldest first in FIFO)", async () => {
+      const fiveDaysAgo = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
+      const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+
+      // Insert C (1h ago) first
+      await db.insert(schema.invoiceRequests).values({
+        requestNumber: "FAC-FIFO-C",
+        warehouseId: testWarehouseId,
+        customerId: testCustomerId,
+        customerRutSnapshot: "761234560",
+        customerLegalNameSnapshot: "Test C",
+        customerBusinessActivitySnapshot: "Venta al por mayor",
+        expectedGrossTotal: 30000,
+        status: "PENDING",
+        requestedBy: warehouseUser.id,
+        createdAt: oneHourAgo,
+      });
+
+      // Insert A (5 days ago) second
+      await db.insert(schema.invoiceRequests).values({
+        requestNumber: "FAC-FIFO-A",
+        warehouseId: testWarehouseId,
+        customerId: testCustomerId,
+        customerRutSnapshot: "761234560",
+        customerLegalNameSnapshot: "Test A",
+        customerBusinessActivitySnapshot: "Venta al por mayor",
+        expectedGrossTotal: 10000,
+        status: "PENDING",
+        requestedBy: warehouseUser.id,
+        createdAt: fiveDaysAgo,
+      });
+
+      // Insert B (3 days ago) third
+      await db.insert(schema.invoiceRequests).values({
+        requestNumber: "FAC-FIFO-B",
+        warehouseId: testWarehouseId,
+        customerId: testCustomerId,
+        customerRutSnapshot: "761234560",
+        customerLegalNameSnapshot: "Test B",
+        customerBusinessActivitySnapshot: "Venta al por mayor",
+        expectedGrossTotal: 20000,
+        status: "PENDING",
+        requestedBy: warehouseUser.id,
+        createdAt: threeDaysAgo,
+      });
+
+      // Fetch pending requests ordered by created_at ASC
+      const pendingList = await db
+        .select()
+        .from(schema.invoiceRequests)
+        .where(eq(schema.invoiceRequests.status, "PENDING"))
+        .orderBy(asc(schema.invoiceRequests.createdAt));
+
+      const requestNumbers = pendingList.map((r) => r.requestNumber);
+      expect(requestNumbers).toEqual(["FAC-FIFO-A", "FAC-FIFO-B", "FAC-FIFO-C"]);
+
+      const ages = pendingList.map((r) => computeAgeIndicator(r.createdAt).displayAge);
+      expect(ages[0]).toBe("5 días");
+      expect(ages[1]).toBe("3 días");
+      expect(ages[2]).toBe("1 h");
+    });
+  });
 });
+

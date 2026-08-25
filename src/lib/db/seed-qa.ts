@@ -215,138 +215,107 @@ export async function seedQa(dbOverride?: any) {
         ? new Date(Date.now() - (params.completedMinutesAgo || 10) * 60 * 1000)
         : null;
 
-    // Check if request already exists
+    // Check if request already exists - NEVER overwrite created_at or existing requests on restart
     const existing = await db
       .select()
       .from(invoiceRequests)
       .where(eq(invoiceRequests.requestNumber, params.requestNumber))
       .limit(1);
 
-    let reqId: string;
     if (existing.length > 0) {
-      reqId = existing[0].id;
-      await db
-        .update(invoiceRequests)
-        .set({
-          status: params.status,
-          assignedTo: assigneeId,
-          expectedGrossTotal: params.expectedGrossTotal,
-          siiGrossTotal: params.status === "COMPLETED" ? params.expectedGrossTotal : null,
-          reconciliationStatus: params.status === "COMPLETED" ? "MATCH" : null,
-          completedAt,
-        })
-        .where(eq(invoiceRequests.id, reqId));
-    } else {
-      const [inserted] = await db
-        .insert(invoiceRequests)
-        .values({
-          requestNumber: params.requestNumber,
-          warehouseId: params.warehouseId,
-          customerId: custId,
-          requestedBy: requesterId,
-          assignedTo: assigneeId,
-          status: params.status,
-          customerRutSnapshot: cust.rutDisplay,
-          customerLegalNameSnapshot: cust.legalName,
-          customerBusinessActivitySnapshot: cust.businessActivity,
-          customerPhoneSnapshot: cust.phone,
-          customerEmailSnapshot: cust.email,
-          expectedGrossTotal: params.expectedGrossTotal,
-          siiGrossTotal: params.status === "COMPLETED" ? params.expectedGrossTotal : null,
-          grossDifference: params.status === "COMPLETED" ? 0 : null,
-          reconciliationStatus: params.status === "COMPLETED" ? "MATCH" : null,
-          notes: params.notes,
-          createdAt,
-          assignedAt: assigneeId ? createdAt : null,
-          completedAt,
-        })
-        .returning();
-      reqId = inserted.id;
-
-      // Insert Items
-      let line = 1;
-      for (const itm of params.items) {
-        const net = calculateNetPrice(itm.grossTotal, DEFAULT_VAT_RATE_PERCENT);
-        await db.insert(invoiceRequestItems).values({
-          invoiceRequestId: reqId,
-          lineNumber: line++,
-          description: itm.description,
-          quantity: itm.quantity,
-          unitPriceGross: Math.round(itm.grossTotal / itm.quantity),
-          unitPriceNet: Math.round(net / itm.quantity),
-          lineTotalGross: itm.grossTotal,
-          lineTotalNet: net,
-          vatRate: "19.00",
-          createdAt,
-        });
-      }
+      // Existing request: preserve completely untouched
+      return;
     }
 
-    // Add observation if NEEDS_CORRECTION
+    const [inserted] = await db
+      .insert(invoiceRequests)
+      .values({
+        requestNumber: params.requestNumber,
+        warehouseId: params.warehouseId,
+        customerId: custId,
+        requestedBy: requesterId,
+        assignedTo: assigneeId,
+        status: params.status,
+        customerRutSnapshot: cust.rutDisplay,
+        customerLegalNameSnapshot: cust.legalName,
+        customerBusinessActivitySnapshot: cust.businessActivity,
+        customerPhoneSnapshot: cust.phone,
+        customerEmailSnapshot: cust.email,
+        expectedGrossTotal: params.expectedGrossTotal,
+        siiGrossTotal: params.status === "COMPLETED" ? params.expectedGrossTotal : null,
+        grossDifference: params.status === "COMPLETED" ? 0 : null,
+        reconciliationStatus: params.status === "COMPLETED" ? "MATCH" : null,
+        notes: params.notes,
+        createdAt,
+        assignedAt: assigneeId ? new Date(createdAt.getTime() + 60 * 60 * 1000) : null,
+        completedAt,
+      })
+      .returning();
+
+    const reqId = inserted.id;
+
+    // Items
+    for (let i = 0; i < params.items.length; i++) {
+      const item = params.items[i];
+      const net = calculateNetPrice(item.grossTotal, DEFAULT_VAT_RATE_PERCENT);
+      await db.insert(invoiceRequestItems).values({
+        invoiceRequestId: reqId,
+        lineNumber: i + 1,
+        description: item.description,
+        quantity: item.quantity,
+        unitPriceGross: Math.round(item.grossTotal / item.quantity),
+        unitPriceNet: Math.round(net / item.quantity),
+        lineTotalGross: item.grossTotal,
+        lineTotalNet: net,
+        vatRate: "19.00",
+        createdAt,
+      });
+    }
+
+    // Correction history if requested
     if (params.status === "NEEDS_CORRECTION" && params.correctionReason) {
       await db.insert(requestCorrections).values({
         invoiceRequestId: reqId,
+        requestedBy: createdUsers["ejecutor@maxiofertas.cl"] || requesterId,
         reason: params.correctionReason,
-        comment: params.correctionComment || "Por favor verificar los datos de facturación.",
-        requestedBy: createdUsers["ejecutor@maxiofertas.cl"],
+        comment: params.correctionComment || "Corrección requerida",
         createdAt: new Date(),
       });
     }
 
-    // Add Document if COMPLETED
-    if (params.createDocument) {
-      const docExists = await db
-        .select()
-        .from(documents)
-        .where(eq(documents.invoiceRequestId, reqId))
-        .limit(1);
+    // Document for completed
+    if (params.createDocument && params.status === "COMPLETED") {
+      const storageKey = `invoices/test-qa-${params.requestNumber}.pdf`;
+      const [doc] = await db
+        .insert(documents)
+        .values({
+          documentType: "INVOICE",
+          storageProvider: "R2",
+          storageKey,
+          fileName: `Factura_${params.requestNumber}.pdf`,
+          mimeType: "application/pdf",
+          fileSize: 1024,
+          invoiceRequestId: reqId,
+          uploadedBy: assigneeId || requesterId,
+          createdAt: completedAt || new Date(),
+        })
+        .returning();
 
-      let docId: string;
-      if (docExists.length === 0) {
-        const [doc] = await db
-          .insert(documents)
-          .values({
-            documentType: "INVOICE",
-            storageProvider: "R2",
-            storageKey: `facturas/qa/${params.requestNumber}.pdf`,
-            fileName: `${params.requestNumber}.pdf`,
-            mimeType: "application/pdf",
-            fileSize: 15420,
-            invoiceRequestId: reqId,
-            isVoided: false,
-            uploadedBy: createdUsers["ejecutor@maxiofertas.cl"],
-            createdAt: completedAt || new Date(),
-          })
-          .returning();
-        docId = doc.id;
-      } else {
-        docId = docExists[0].id;
-      }
-
-      // Add Rectification if requested
       if (params.rectificationRequested) {
-        const rectExists = await db
-          .select()
-          .from(rectifications)
-          .where(eq(rectifications.invoiceRequestId, reqId))
-          .limit(1);
-
-        if (rectExists.length === 0) {
-          await db.insert(rectifications).values({
-            invoiceRequestId: reqId,
-            originalInvoiceDocumentId: docId,
-            requestedBy: requesterId,
-            reason: "PRICE",
-            comment: "El cliente solicitó descuento adicional del 10% acordado comercialmente.",
-            status: "REQUESTED",
-            requestedAt: new Date(Date.now() - 30 * 60 * 1000),
-          });
-        }
+        await db.insert(rectifications).values({
+          invoiceRequestId: reqId,
+          originalInvoiceDocumentId: doc.id,
+          requestedBy: requesterId,
+          reason: "PRICE",
+          comment: "El cliente solicitó descuento adicional del 10% acordado comercialmente.",
+          status: "REQUESTED",
+          requestedAt: new Date(Date.now() - 30 * 60 * 1000),
+        });
       }
     }
   };
 
-  // Case 1: PENDING (Oldest in queue - Santiago, created >3 days ago)
+  // Case 1: PENDING (Oldest in queue - Santiago, created 5 days 4 hours ago)
   await createSampleRequest({
     requestNumber: "FAC-2026-000101",
     warehouseId: whSantiago.id,
@@ -354,7 +323,7 @@ export async function seedQa(dbOverride?: any) {
     requestedByEmail: "solicitante@maxiofertas.cl",
     status: "PENDING",
     expectedGrossTotal: 125000,
-    createdMinutesAgo: 4560, // 3 days 4 hours ago
+    createdMinutesAgo: 5 * 24 * 60 + 4 * 60, // 5 days 4 hours ago
     notes: "Despacho con flete prioritario",
     items: [
       { description: "Pack 10 Cajas Aceite Vegetal 1L", quantity: 10, grossTotal: 75000 },
@@ -362,7 +331,7 @@ export async function seedQa(dbOverride?: any) {
     ],
   });
 
-  // Case 2: PENDING (Recent - Bodega Norte)
+  // Case 2: PENDING (Bodega Norte, created 4 days 2 hours ago)
   await createSampleRequest({
     requestNumber: "FAC-2026-000102",
     warehouseId: whNorte.id,
@@ -370,14 +339,14 @@ export async function seedQa(dbOverride?: any) {
     requestedByEmail: "solicitante.norte@maxiofertas.cl",
     status: "PENDING",
     expectedGrossTotal: 250000,
-    createdMinutesAgo: 45,
+    createdMinutesAgo: 4 * 24 * 60 + 2 * 60, // 4 days 2 hours ago
     items: [
       { description: "Insumos de Limpieza Industrial 20L", quantity: 5, grossTotal: 150000 },
       { description: "Pack Mascarillas y Guantes Nitrilo", quantity: 10, grossTotal: 100000 },
     ],
   });
 
-  // Case 3: IN_PROGRESS (Claimed by María Ejecutora)
+  // Case 3: IN_PROGRESS (Claimed by María Ejecutora, created 3 days 2 hours ago)
   await createSampleRequest({
     requestNumber: "FAC-2026-000103",
     warehouseId: whSantiago.id,
@@ -386,11 +355,11 @@ export async function seedQa(dbOverride?: any) {
     assignedToEmail: "ejecutor@maxiofertas.cl",
     status: "IN_PROGRESS",
     expectedGrossTotal: 95000,
-    createdMinutesAgo: 120,
+    createdMinutesAgo: 3 * 24 * 60 + 2 * 60, // 3 days 2 hours ago
     items: [{ description: "Bebidas y Jugos en Lata x24", quantity: 4, grossTotal: 95000 }],
   });
 
-  // Case 4: NEEDS_CORRECTION (Requires warehouse fix)
+  // Case 4: NEEDS_CORRECTION (Requires warehouse fix, created 3 days ago)
   await createSampleRequest({
     requestNumber: "FAC-2026-000104",
     warehouseId: whSantiago.id,
@@ -398,13 +367,13 @@ export async function seedQa(dbOverride?: any) {
     requestedByEmail: "solicitante@maxiofertas.cl",
     status: "NEEDS_CORRECTION",
     expectedGrossTotal: 45000,
-    createdMinutesAgo: 240,
+    createdMinutesAgo: 3 * 24 * 60, // 3 days ago
     correctionReason: "INCOMPLETE_PRODUCTS",
     correctionComment: "Falta detallar los códigos y especificaciones técnicas de los productos.",
     items: [{ description: "Artículos de Oficina y Papelería", quantity: 1, grossTotal: 45000 }],
   });
 
-  // Case 5: COMPLETED (Emitted invoice with document viewable - Completed yesterday)
+  // Case 5: COMPLETED (Emitted invoice with document viewable - Completed 4 days ago)
   await createSampleRequest({
     requestNumber: "FAC-2026-000105",
     warehouseId: whSantiago.id,
@@ -413,13 +382,13 @@ export async function seedQa(dbOverride?: any) {
     assignedToEmail: "ejecutor@maxiofertas.cl",
     status: "COMPLETED",
     expectedGrossTotal: 119000,
-    createdMinutesAgo: 1600,
-    completedMinutesAgo: 1560, // Completed yesterday
+    createdMinutesAgo: 4 * 24 * 60 + 120,
+    completedMinutesAgo: 4 * 24 * 60 + 60, // Completed 4 days ago
     createDocument: true,
     items: [{ description: "Set Herramientas Básicas", quantity: 2, grossTotal: 119000 }],
   });
 
-  // Case 6: COMPLETED with Rectification Requested (Completed yesterday, rectification requested 30m ago)
+  // Case 6: COMPLETED with Rectification Requested (Completed 4 days ago, rectification requested 30m ago)
   await createSampleRequest({
     requestNumber: "FAC-2026-000106",
     warehouseId: whSantiago.id,
@@ -428,8 +397,8 @@ export async function seedQa(dbOverride?: any) {
     assignedToEmail: "ejecutor@maxiofertas.cl",
     status: "COMPLETED",
     expectedGrossTotal: 85000,
-    createdMinutesAgo: 1720,
-    completedMinutesAgo: 1680, // Completed yesterday
+    createdMinutesAgo: 4 * 24 * 60 + 180,
+    completedMinutesAgo: 4 * 24 * 60 + 120, // Completed 4 days ago
     createDocument: true,
     rectificationRequested: true,
     items: [{ description: "Pack Alimentos No Perecibles", quantity: 5, grossTotal: 85000 }],
