@@ -346,7 +346,7 @@ export async function seedQa(dbOverride?: any) {
     }
   };
 
-  // Case 1: PENDING (Oldest in queue - Santiago)
+  // Case 1: PENDING (Oldest in queue - Santiago, created >3 days ago)
   await createSampleRequest({
     requestNumber: "FAC-2026-000101",
     warehouseId: whSantiago.id,
@@ -354,7 +354,7 @@ export async function seedQa(dbOverride?: any) {
     requestedByEmail: "solicitante@maxiofertas.cl",
     status: "PENDING",
     expectedGrossTotal: 125000,
-    createdMinutesAgo: 180,
+    createdMinutesAgo: 4560, // 3 days 4 hours ago
     notes: "Despacho con flete prioritario",
     items: [
       { description: "Pack 10 Cajas Aceite Vegetal 1L", quantity: 10, grossTotal: 75000 },
@@ -404,7 +404,7 @@ export async function seedQa(dbOverride?: any) {
     items: [{ description: "Artículos de Oficina y Papelería", quantity: 1, grossTotal: 45000 }],
   });
 
-  // Case 5: COMPLETED (Emitted invoice with document viewable)
+  // Case 5: COMPLETED (Emitted invoice with document viewable - Completed yesterday)
   await createSampleRequest({
     requestNumber: "FAC-2026-000105",
     warehouseId: whSantiago.id,
@@ -413,13 +413,13 @@ export async function seedQa(dbOverride?: any) {
     assignedToEmail: "ejecutor@maxiofertas.cl",
     status: "COMPLETED",
     expectedGrossTotal: 119000,
-    createdMinutesAgo: 300,
-    completedMinutesAgo: 60,
+    createdMinutesAgo: 1600,
+    completedMinutesAgo: 1560, // Completed yesterday
     createDocument: true,
     items: [{ description: "Set Herramientas Básicas", quantity: 2, grossTotal: 119000 }],
   });
 
-  // Case 6: COMPLETED with Rectification Requested (In Cambios Solicitados queue)
+  // Case 6: COMPLETED with Rectification Requested (Completed yesterday, rectification requested 30m ago)
   await createSampleRequest({
     requestNumber: "FAC-2026-000106",
     warehouseId: whSantiago.id,
@@ -428,8 +428,8 @@ export async function seedQa(dbOverride?: any) {
     assignedToEmail: "ejecutor@maxiofertas.cl",
     status: "COMPLETED",
     expectedGrossTotal: 85000,
-    createdMinutesAgo: 400,
-    completedMinutesAgo: 180,
+    createdMinutesAgo: 1720,
+    completedMinutesAgo: 1680, // Completed yesterday
     createDocument: true,
     rectificationRequested: true,
     items: [{ description: "Pack Alimentos No Perecibles", quantity: 5, grossTotal: 85000 }],

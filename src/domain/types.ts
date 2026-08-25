@@ -373,3 +373,19 @@ export interface SanitizedDocumentShareToken {
   createdAt: string;
 }
 
+export interface ExecutorPerformanceItem {
+  executorId: string;
+  executorName: string;
+  executorEmail: string;
+  invoicesThisMonth: number;
+  historicalMonthlyAverage: number | null; // null if no closed historical months
+  historicalTotal: number;
+  rectificationsCompleted: number;
+}
+
+export interface ExecutorStatisticsResponse {
+  period: StatisticsPeriod;
+  executors: ExecutorPerformanceItem[];
+}
+
+

@@ -1,4 +1,4 @@
-﻿import { eq, and, sql, gte, lte, asc, desc, isNull } from "drizzle-orm";
+import { eq, and, sql, gte, lte, asc, desc, isNull } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import {
   invoiceRequests,
@@ -9,12 +9,15 @@ import {
   users,
 } from "@/lib/db/schema";
 import { calculateNetPrice, DEFAULT_VAT_RATE_PERCENT } from "@/domain/pricing";
+import { getChileDayBounds, getChileMonthBounds, getChileCurrentYearMonth } from "@/lib/utils/dates";
 import {
   SanitizedUser,
   StatisticsSummary,
   WarehouseStatistics,
   MonthlyEvolutionItem,
   StatisticsPeriod,
+  ExecutorPerformanceItem,
+  ExecutorStatisticsResponse,
 } from "@/domain/types";
 
 const MONTH_NAMES = [
@@ -571,3 +574,190 @@ export async function getMonthlyEvolutionService(
 
   return { history };
 }
+
+/**
+ * QA-012: Operational statistics per billing executor.
+ * Strictly restricted to ADMIN and MANAGEMENT roles.
+ */
+export async function getExecutorStatisticsService(
+  currentUser: SanitizedUser,
+  params: StatisticsFilterParams = {},
+  dbOverride?: unknown
+): Promise<ExecutorStatisticsResponse> {
+  const db = (dbOverride as ReturnType<typeof getDb>) || getDb();
+  if (!db) {
+    throw new Error("Base de datos no disponible.");
+  }
+
+  // Strict server-side RBAC: Only ADMIN and MANAGEMENT can view executor performance metrics
+  if (currentUser.role !== "ADMIN" && currentUser.role !== "MANAGEMENT") {
+    throw new Error("FORBIDDEN: Solo Administradores y Jefatura tienen acceso a las estadísticas de ejecutores.");
+  }
+
+  const { year: currentChileYear, month: currentChileMonth } = getChileCurrentYearMonth();
+  const filterYear = params.year || currentChileYear;
+  const filterMonth = params.month || currentChileMonth;
+
+  const { startOfMonth: periodStart, endOfMonth: periodEnd } = getChileMonthBounds(filterYear, filterMonth);
+  const { startOfMonth: currentMonthStart } = getChileMonthBounds(currentChileYear, currentChileMonth);
+
+  // Period descriptor
+  const period: StatisticsPeriod = {
+    year: filterYear,
+    month: filterMonth,
+    label: `${MONTH_NAMES[filterMonth - 1] || "Mes"} ${filterYear}`,
+    startDate: periodStart.toISOString(),
+    endDate: periodEnd.toISOString(),
+  };
+
+  // Get all active executors (users with role INVOICE_EXECUTOR, or any user who has completed invoices)
+  const allExecutors = await db
+    .select({
+      id: users.id,
+      name: users.name,
+      email: users.email,
+      role: users.role,
+    })
+    .from(users)
+    .where(eq(users.role, "INVOICE_EXECUTOR"))
+    .orderBy(asc(users.name));
+
+  const executorList: ExecutorPerformanceItem[] = [];
+
+  for (const exec of allExecutors) {
+    // 1. Invoices in selected period
+    // Regular invoices completed by executor
+    const [periodRegularRes] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(invoiceRequests)
+      .where(
+        and(
+          eq(invoiceRequests.assignedTo, exec.id),
+          eq(invoiceRequests.status, "COMPLETED"),
+          gte(invoiceRequests.completedAt, periodStart),
+          lte(invoiceRequests.completedAt, periodEnd)
+        )
+      );
+
+    // Replacement invoices completed by executor
+    const [periodReplacementsRes] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(rectifications)
+      .where(
+        and(
+          eq(rectifications.assignedTo, exec.id),
+          eq(rectifications.status, "COMPLETED"),
+          gte(rectifications.completedAt, periodStart),
+          lte(rectifications.completedAt, periodEnd)
+        )
+      );
+
+    const invoicesThisMonth = (periodRegularRes?.count || 0) + (periodReplacementsRes?.count || 0);
+
+    // 2. Historical Total (all time completed)
+    const [totalRegularRes] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(invoiceRequests)
+      .where(
+        and(
+          eq(invoiceRequests.assignedTo, exec.id),
+          eq(invoiceRequests.status, "COMPLETED")
+        )
+      );
+
+    const [totalReplacementsRes] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(rectifications)
+      .where(
+        and(
+          eq(rectifications.assignedTo, exec.id),
+          eq(rectifications.status, "COMPLETED")
+        )
+      );
+
+    const historicalTotal = (totalRegularRes?.count || 0) + (totalReplacementsRes?.count || 0);
+
+    // 3. Historical Monthly Average
+    const [minReqDateRes] = await db
+      .select({ minDate: sql<Date | null>`min(${invoiceRequests.completedAt})` })
+      .from(invoiceRequests)
+      .where(
+        and(
+          eq(invoiceRequests.assignedTo, exec.id),
+          eq(invoiceRequests.status, "COMPLETED")
+        )
+      );
+
+    const [minRectDateRes] = await db
+      .select({ minDate: sql<Date | null>`min(${rectifications.completedAt})` })
+      .from(rectifications)
+      .where(
+        and(
+          eq(rectifications.assignedTo, exec.id),
+          eq(rectifications.status, "COMPLETED")
+        )
+      );
+
+    const dates: Date[] = [];
+    if (minReqDateRes?.minDate) dates.push(new Date(minReqDateRes.minDate));
+    if (minRectDateRes?.minDate) dates.push(new Date(minRectDateRes.minDate));
+
+    let historicalMonthlyAverage: number | null = null;
+
+    if (dates.length > 0) {
+      const earliestDate = new Date(Math.min(...dates.map((d) => d.getTime())));
+      const chileDateStr = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "America/Santiago",
+        year: "numeric",
+        month: "2-digit",
+      }).format(earliestDate);
+      const [eYear, eMonth] = chileDateStr.split("-").map(Number);
+
+      // Closed months: full months strictly before current calendar month in Chile
+      const closedMonthsCount = (currentChileYear - eYear) * 12 + (currentChileMonth - eMonth);
+
+      if (closedMonthsCount > 0) {
+        const [closedRegularRes] = await db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(invoiceRequests)
+          .where(
+            and(
+              eq(invoiceRequests.assignedTo, exec.id),
+              eq(invoiceRequests.status, "COMPLETED"),
+              sql`${invoiceRequests.completedAt} < ${currentMonthStart}`
+            )
+          );
+
+        const [closedReplacementsRes] = await db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(rectifications)
+          .where(
+            and(
+              eq(rectifications.assignedTo, exec.id),
+              eq(rectifications.status, "COMPLETED"),
+              sql`${rectifications.completedAt} < ${currentMonthStart}`
+            )
+          );
+
+        const closedTotal = (closedRegularRes?.count || 0) + (closedReplacementsRes?.count || 0);
+        historicalMonthlyAverage = Math.round((closedTotal / closedMonthsCount) * 10) / 10;
+      }
+    }
+
+    executorList.push({
+      executorId: exec.id,
+      executorName: exec.name,
+      executorEmail: exec.email,
+      invoicesThisMonth,
+      historicalMonthlyAverage,
+      historicalTotal,
+      rectificationsCompleted: totalReplacementsRes?.count || 0,
+    });
+  }
+
+  return {
+    period,
+    executors: executorList,
+  };
+}
+

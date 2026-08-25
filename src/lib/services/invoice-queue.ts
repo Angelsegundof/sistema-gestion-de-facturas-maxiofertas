@@ -1,4 +1,4 @@
-import { eq, and, sql, desc, asc, count } from "drizzle-orm";
+import { eq, and, sql, desc, asc, count, gte, lte } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import {
   invoiceRequests,
@@ -20,6 +20,7 @@ import {
 } from "@/domain/pricing";
 import { formatRut, normalizeRut, validateRut } from "@/lib/validation/rut";
 import { logAuditEvent } from "@/lib/auth/audit";
+import { getChileDayBounds } from "@/lib/utils/dates";
 import {
   AgeIndicator,
   AgeCategory,
@@ -46,10 +47,18 @@ export function computeAgeIndicator(createdAt: Date | string): AgeIndicator {
     displayAge = `${minutesElapsed} min`;
     category = "30_60m";
   } else {
-    const hours = Math.floor(minutesElapsed / 60);
+    const totalHours = Math.floor(minutesElapsed / 60);
     const remainingMins = minutesElapsed % 60;
-    displayAge = remainingMins > 0 ? `${hours} h ${remainingMins} min` : `${hours} h`;
-    category = hours >= 2 ? "over_2h" : "1_2h";
+    category = totalHours >= 2 ? "over_2h" : "1_2h";
+
+    if (totalHours >= 24) {
+      const days = Math.floor(totalHours / 24);
+      const remainingHours = totalHours % 24;
+      const dayLabel = days === 1 ? "1 día" : `${days} días`;
+      displayAge = remainingHours > 0 ? `${dayLabel} ${remainingHours} h` : dayLabel;
+    } else {
+      displayAge = remainingMins > 0 ? `${totalHours} h ${remainingMins} min` : `${totalHours} h`;
+    }
   }
 
   return {
@@ -68,15 +77,15 @@ export async function getQueueCountersService(
     throw new Error("Base de datos no disponible.");
   }
 
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
+  const { startOfDay, endOfDay } = getChileDayBounds();
 
   const pendingConds = [eq(invoiceRequests.status, "PENDING")];
   const inProgressConds = [eq(invoiceRequests.status, "IN_PROGRESS")];
   const needsCorrectionConds = [eq(invoiceRequests.status, "NEEDS_CORRECTION")];
   const completedTodayConds = [
     eq(invoiceRequests.status, "COMPLETED"),
-    sql`${invoiceRequests.completedAt} >= ${todayStart}`,
+    gte(invoiceRequests.completedAt, startOfDay),
+    lte(invoiceRequests.completedAt, endOfDay),
   ];
 
   if (warehouseId) {

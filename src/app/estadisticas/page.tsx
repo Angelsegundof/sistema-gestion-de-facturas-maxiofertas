@@ -10,6 +10,7 @@ import {
   StatisticsSummary,
   WarehouseStatistics,
   MonthlyEvolutionItem,
+  ExecutorPerformanceItem,
 } from "@/domain/types";
 
 const MONTH_NAMES = [
@@ -43,6 +44,7 @@ export default function EstadisticasPage() {
   const [summary, setSummary] = useState<StatisticsSummary | null>(null);
   const [warehouseStats, setWarehouseStats] = useState<WarehouseStatistics[]>([]);
   const [monthlyHistory, setMonthlyHistory] = useState<MonthlyEvolutionItem[]>([]);
+  const [executorStats, setExecutorStats] = useState<ExecutorPerformanceItem[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -98,19 +100,24 @@ export default function EstadisticasPage() {
 
       const whParam = selectedWarehouseId ? `&warehouseId=${encodeURIComponent(selectedWarehouseId)}` : "";
       const queryParams = `?month=${selectedMonth}&year=${selectedYear}${whParam}`;
+      const execQueryParams = `?month=${selectedMonth}&year=${selectedYear}`;
 
       try {
-        const [sumRes, whRes, monRes] = await Promise.all([
+        const fetchPromises: Promise<Response>[] = [
           fetch(`/api/v1/statistics/summary${queryParams}`),
           fetch(`/api/v1/statistics/by-warehouse${queryParams}`),
           fetch(`/api/v1/statistics/monthly?months=6${whParam}`),
-        ]);
+        ];
 
-        const [sumJson, whJson, monJson] = await Promise.all([
-          sumRes.json(),
-          whRes.json(),
-          monRes.json(),
-        ]);
+        const canViewExecStats = currentUser?.role === "ADMIN" || currentUser?.role === "MANAGEMENT";
+        if (canViewExecStats) {
+          fetchPromises.push(fetch(`/api/v1/statistics/executors${execQueryParams}`));
+        }
+
+        const responses = await Promise.all(fetchPromises);
+        const [sumJson, whJson, monJson, execJson] = await Promise.all(
+          responses.map((r) => r.json())
+        );
 
         if (!isMounted) return;
 
@@ -126,6 +133,10 @@ export default function EstadisticasPage() {
 
         if (monJson.success && monJson.data?.history) {
           setMonthlyHistory(monJson.data.history);
+        }
+
+        if (execJson?.success && execJson.data?.executors) {
+          setExecutorStats(execJson.data.executors);
         }
       } catch {
         if (isMounted) setErrorMsg("Error de red al consultar estadísticas.");
@@ -393,6 +404,69 @@ export default function EstadisticasPage() {
                 </p>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* QA-012: GESTIÓN DE EJECUTORES (ADMIN & MANAGEMENT) */}
+        {(currentUser?.role === "ADMIN" || currentUser?.role === "MANAGEMENT") && (
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-extrabold text-slate-900">Gestión por Ejecutor</h2>
+                <p className="text-xs text-slate-500">
+                  Actividad operacional acumulada y desempeño por ejecutor de facturación.
+                </p>
+              </div>
+              <span className="text-xs bg-slate-100 text-slate-700 px-3 py-1 rounded-full font-bold">
+                {MONTH_NAMES[selectedMonth - 1]} {selectedYear}
+              </span>
+            </div>
+
+            {executorStats.length === 0 ? (
+              <p className="text-xs text-slate-500 italic py-4 text-center">
+                No hay ejecutores registrados o con actividad en el sistema.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs text-left">
+                  <thead className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200 uppercase">
+                    <tr>
+                      <th className="p-3.5">Ejecutor</th>
+                      <th className="p-3.5 text-center">Facturas en Período</th>
+                      <th className="p-3.5 text-center">Promedio Mensual Histórico</th>
+                      <th className="p-3.5 text-center">Total Histórico</th>
+                      <th className="p-3.5 text-center">Rectificaciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {executorStats.map((exec) => (
+                      <tr key={exec.executorId} className="hover:bg-slate-50/60 transition">
+                        <td className="p-3.5 font-extrabold text-slate-900">
+                          {exec.executorName}
+                          <span className="block text-[10px] text-slate-400 font-normal">{exec.executorEmail}</span>
+                        </td>
+                        <td className="p-3.5 text-center font-black text-blue-700 text-sm">
+                          {exec.invoicesThisMonth}
+                        </td>
+                        <td className="p-3.5 text-center font-bold text-slate-700">
+                          {exec.historicalMonthlyAverage !== null ? (
+                            <span>{exec.historicalMonthlyAverage} <span className="text-[10px] text-slate-400 font-normal">/ mes</span></span>
+                          ) : (
+                            <span className="text-slate-400 font-normal italic">Sin histórico suficiente</span>
+                          )}
+                        </td>
+                        <td className="p-3.5 text-center font-black text-slate-900 text-sm">
+                          {exec.historicalTotal}
+                        </td>
+                        <td className="p-3.5 text-center font-semibold text-amber-700">
+                          {exec.rectificationsCompleted}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
 
