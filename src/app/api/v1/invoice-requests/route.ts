@@ -187,6 +187,7 @@ export async function GET(request: NextRequest) {
   const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
   const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get("pageSize") || "25", 10)));
   const includeCounters = searchParams.get("counters") === "true";
+  const todayOnly = searchParams.get("todayOnly") === "true";
 
   const validStatus = statusParam && invoiceRequestStatuses.includes(statusParam) ? statusParam : undefined;
 
@@ -198,6 +199,7 @@ export async function GET(request: NextRequest) {
       search: searchParam,
       page,
       pageSize,
+      todayOnly,
     });
 
     let counters: QueueSummaryCounters | undefined = undefined;

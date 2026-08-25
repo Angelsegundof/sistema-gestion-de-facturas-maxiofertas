@@ -25,8 +25,20 @@ function initLocalPglite(): PgliteDatabase<typeof schema> {
     return global.__localPgliteDb;
   }
 
-  // Use fast, lock-free in-memory PGlite for local development and tests
-  const pglite = new PGlite();
+  // In development, persist to .data/pglite on disk so all customers, requests and edits survive server restarts
+  // In test (vitest), use in-memory PGlite for fast isolated tests
+  const isTest = process.env.NODE_ENV === "test" || process.env.VITEST === "true";
+  let pglite: PGlite;
+  if (isTest) {
+    pglite = new PGlite();
+  } else {
+    const dataDir = path.resolve(process.cwd(), ".data/pglite");
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    pglite = new PGlite(dataDir);
+  }
+
   global.__localPgliteInstance = pglite;
   const localDb = drizzlePglite(pglite, { schema });
   global.__localPgliteDb = localDb;

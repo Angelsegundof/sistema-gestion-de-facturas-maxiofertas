@@ -34,7 +34,9 @@ export default function GestionFacturacionPage() {
   const [loadingUser, setLoadingUser] = useState(true);
 
   // Queue state
-  const [activeTab, setActiveTab] = useState<InvoiceRequestStatus | "RECTIFICATIONS">("PENDING");
+  const [activeTab, setActiveTab] = useState<
+    InvoiceRequestStatus | "RECTIFICATIONS" | "COMPLETED_TODAY"
+  >("PENDING");
   const [requests, setRequests] = useState<SanitizedInvoiceRequest[]>([]);
   const [rectifications, setRectifications] = useState<SanitizedRectification[]>([]);
   const [counters, setCounters] = useState<QueueSummaryCounters>({
@@ -48,8 +50,19 @@ export default function GestionFacturacionPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [claimingId, setClaimingId] = useState<string | null>(null);
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const pageSize = 25;
+
   // Search filter
   const [searchTerm, setSearchTerm] = useState("");
+
+  // Reset page to 1 when tab or filters change
+  const handleTabChange = (tab: InvoiceRequestStatus | "RECTIFICATIONS" | "COMPLETED_TODAY") => {
+    setActiveTab(tab);
+    setCurrentPage(1);
+  };
 
   // Load authenticated user and warehouses
   useEffect(() => {
@@ -98,13 +111,15 @@ export default function GestionFacturacionPage() {
         setLoadingQueue(true);
         const searchParam = searchTerm.trim() ? `&search=${encodeURIComponent(searchTerm.trim())}` : "";
         const whParam = selectedWarehouseId ? `&warehouseId=${encodeURIComponent(selectedWarehouseId)}` : "";
+        const pageParam = `&page=${currentPage}&pageSize=${pageSize}`;
 
         if (activeTab === "RECTIFICATIONS") {
-          const res = await fetch(`/api/v1/rectifications?page=1&pageSize=50${searchParam}${whParam}`);
+          const res = await fetch(`/api/v1/rectifications?counters=true${searchParam}${whParam}${pageParam}`);
           const data = await res.json();
           if (!isMounted) return;
           if (data.success && data.data) {
             setRectifications(data.data.rectifications || []);
+            setTotalCount(data.data.total || 0);
           }
 
           // Fetch counters in parallel with warehouse filter
@@ -113,14 +128,28 @@ export default function GestionFacturacionPage() {
           if (isMounted && countersData.success && countersData.data?.counters) {
             setCounters(countersData.data.counters);
           }
-        } else {
+        } else if (activeTab === "COMPLETED_TODAY") {
           const res = await fetch(
-            `/api/v1/invoice-requests?status=${activeTab}&counters=true${searchParam}${whParam}`
+            `/api/v1/invoice-requests?status=COMPLETED&todayOnly=true&counters=true${searchParam}${whParam}${pageParam}`
           );
           const data = await res.json();
           if (!isMounted) return;
           if (data.success && data.data) {
             setRequests(data.data.requests || []);
+            setTotalCount(data.data.total || 0);
+            if (data.data.counters) {
+              setCounters(data.data.counters);
+            }
+          }
+        } else {
+          const res = await fetch(
+            `/api/v1/invoice-requests?status=${activeTab}&counters=true${searchParam}${whParam}${pageParam}`
+          );
+          const data = await res.json();
+          if (!isMounted) return;
+          if (data.success && data.data) {
+            setRequests(data.data.requests || []);
+            setTotalCount(data.data.total || 0);
             if (data.data.counters) {
               setCounters(data.data.counters);
             }
@@ -137,7 +166,7 @@ export default function GestionFacturacionPage() {
     return () => {
       isMounted = false;
     };
-  }, [currentUser, activeTab, searchTerm, selectedWarehouseId]);
+  }, [currentUser, activeTab, searchTerm, selectedWarehouseId, currentPage]);
 
   const refreshQueue = async () => {
     setLoadingQueue(true);
@@ -299,7 +328,7 @@ export default function GestionFacturacionPage() {
         {/* Operational Counters */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           <div
-            onClick={() => setActiveTab("PENDING")}
+            onClick={() => handleTabChange("PENDING")}
             className={`cursor-pointer p-4 rounded-xl border transition-all ${
               activeTab === "PENDING"
                 ? "bg-amber-50 border-amber-400 ring-2 ring-amber-400"
@@ -311,7 +340,7 @@ export default function GestionFacturacionPage() {
           </div>
 
           <div
-            onClick={() => setActiveTab("IN_PROGRESS")}
+            onClick={() => handleTabChange("IN_PROGRESS")}
             className={`cursor-pointer p-4 rounded-xl border transition-all ${
               activeTab === "IN_PROGRESS"
                 ? "bg-blue-50 border-blue-400 ring-2 ring-blue-400"
@@ -323,7 +352,7 @@ export default function GestionFacturacionPage() {
           </div>
 
           <div
-            onClick={() => setActiveTab("NEEDS_CORRECTION")}
+            onClick={() => handleTabChange("NEEDS_CORRECTION")}
             className={`cursor-pointer p-4 rounded-xl border transition-all ${
               activeTab === "NEEDS_CORRECTION"
                 ? "bg-rose-50 border-rose-400 ring-2 ring-rose-400"
@@ -335,7 +364,7 @@ export default function GestionFacturacionPage() {
           </div>
 
           <div
-            onClick={() => setActiveTab("RECTIFICATIONS")}
+            onClick={() => handleTabChange("RECTIFICATIONS")}
             className={`cursor-pointer p-4 rounded-xl border transition-all ${
               activeTab === "RECTIFICATIONS"
                 ? "bg-purple-50 border-purple-400 ring-2 ring-purple-400"
@@ -347,9 +376,9 @@ export default function GestionFacturacionPage() {
           </div>
 
           <div
-            onClick={() => setActiveTab("COMPLETED")}
+            onClick={() => handleTabChange("COMPLETED_TODAY")}
             className={`cursor-pointer p-4 rounded-xl border transition-all ${
-              activeTab === "COMPLETED"
+              activeTab === "COMPLETED_TODAY"
                 ? "bg-emerald-50 border-emerald-400 ring-2 ring-emerald-400"
                 : "bg-white border-slate-200 hover:border-slate-300 shadow-sm"
             }`}
@@ -376,7 +405,7 @@ export default function GestionFacturacionPage() {
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex flex-wrap gap-2 w-full sm:w-auto">
             <button
-              onClick={() => setActiveTab("PENDING")}
+              onClick={() => handleTabChange("PENDING")}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
                 activeTab === "PENDING" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
               }`}
@@ -384,7 +413,7 @@ export default function GestionFacturacionPage() {
               Pendientes ({counters.pendingCount})
             </button>
             <button
-              onClick={() => setActiveTab("IN_PROGRESS")}
+              onClick={() => handleTabChange("IN_PROGRESS")}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
                 activeTab === "IN_PROGRESS" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
               }`}
@@ -392,7 +421,7 @@ export default function GestionFacturacionPage() {
               En proceso ({counters.inProgressCount})
             </button>
             <button
-              onClick={() => setActiveTab("NEEDS_CORRECTION")}
+              onClick={() => handleTabChange("NEEDS_CORRECTION")}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
                 activeTab === "NEEDS_CORRECTION"
                   ? "bg-slate-900 text-white"
@@ -402,7 +431,7 @@ export default function GestionFacturacionPage() {
               Correcciones ({counters.needsCorrectionCount})
             </button>
             <button
-              onClick={() => setActiveTab("RECTIFICATIONS")}
+              onClick={() => handleTabChange("RECTIFICATIONS")}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
                 activeTab === "RECTIFICATIONS"
                   ? "bg-purple-700 text-white"
@@ -412,12 +441,20 @@ export default function GestionFacturacionPage() {
               Cambios solicitados ({counters.changesRequestedCount})
             </button>
             <button
-              onClick={() => setActiveTab("COMPLETED")}
+              onClick={() => handleTabChange("COMPLETED_TODAY")}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-                activeTab === "COMPLETED" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                activeTab === "COMPLETED_TODAY" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
               }`}
             >
               Listas hoy ({counters.completedTodayCount})
+            </button>
+            <button
+              onClick={() => handleTabChange("COMPLETED")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                activeTab === "COMPLETED" ? "bg-emerald-700 text-white shadow-xs" : "bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+              }`}
+            >
+              📜 Realizadas (Histórico)
             </button>
           </div>
 
@@ -425,7 +462,10 @@ export default function GestionFacturacionPage() {
             {/* Bodega Selector */}
             <select
               value={selectedWarehouseId}
-              onChange={(e) => setSelectedWarehouseId(e.target.value)}
+              onChange={(e) => {
+                setSelectedWarehouseId(e.target.value);
+                setCurrentPage(1);
+              }}
               className="w-full sm:w-auto px-3 py-1.5 text-xs font-semibold bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
             >
               <option value="">Bodega: Todas</option>
@@ -440,8 +480,11 @@ export default function GestionFacturacionPage() {
               <input
                 type="text"
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Buscar por número, RUT o cliente..."
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setCurrentPage(1);
+                }}
+                placeholder="Buscar por número, RUT, cliente o ejecutor..."
                 className="w-full px-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
@@ -534,14 +577,24 @@ export default function GestionFacturacionPage() {
             )}
           </div>
         ) : (
-          /* STANDARD REQUESTS TABLE */
+          /* STANDARD REQUESTS / REALIZADAS TABLE */
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
             {loadingQueue ? (
-              <div className="p-8 text-center text-sm text-slate-500">Cargando cola de solicitudes...</div>
+              <div className="p-8 text-center text-sm text-slate-500">Cargando solicitudes...</div>
             ) : requests.length === 0 ? (
               <div className="p-12 text-center text-slate-500">
-                <p className="text-base font-semibold">No hay solicitudes en esta sección.</p>
-                <p className="text-xs text-slate-400 mt-1">Las nuevas solicitudes aparecerán automáticamente.</p>
+                <p className="text-base font-semibold">
+                  {activeTab === "COMPLETED"
+                    ? "No se encontraron facturas realizadas con los filtros aplicados."
+                    : activeTab === "COMPLETED_TODAY"
+                    ? "Aún no se han emitido facturas durante el día de hoy."
+                    : "No hay solicitudes en esta sección."}
+                </p>
+                <p className="text-xs text-slate-400 mt-1">
+                  {activeTab === "COMPLETED"
+                    ? "Las facturas completadas se conservan aquí de manera permanente."
+                    : "Las nuevas solicitudes aparecerán automáticamente."}
+                </p>
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -552,7 +605,14 @@ export default function GestionFacturacionPage() {
                       <th className="p-3.5">Bodega</th>
                       <th className="p-3.5">Cliente</th>
                       <th className="p-3.5">Monto Total</th>
-                      <th className="p-3.5">Antigüedad</th>
+                      {activeTab === "COMPLETED" || activeTab === "COMPLETED_TODAY" ? (
+                        <>
+                          <th className="p-3.5">Fecha Realización</th>
+                          <th className="p-3.5">Ejecutor</th>
+                        </>
+                      ) : (
+                        <th className="p-3.5">Antigüedad</th>
+                      )}
                       <th className="p-3.5 text-right">Acción</th>
                     </tr>
                   </thead>
@@ -560,6 +620,18 @@ export default function GestionFacturacionPage() {
                     {requests.map((r) => {
                       const isAssigned = !!r.assignedTo;
                       const isAssignedToMe = r.assignedTo === currentUser?.id || currentUser?.role === "ADMIN";
+                      const isCompletedView = activeTab === "COMPLETED" || activeTab === "COMPLETED_TODAY";
+
+                      const formattedCompletedAt = r.completedAt
+                        ? new Date(r.completedAt).toLocaleString("es-CL", {
+                            timeZone: "America/Santiago",
+                            day: "2-digit",
+                            month: "2-digit",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })
+                        : "—";
 
                       return (
                         <tr key={r.id} className="hover:bg-slate-50 transition">
@@ -579,17 +651,32 @@ export default function GestionFacturacionPage() {
                           <td className="p-3.5 font-extrabold text-slate-900">
                             {formatCLP(r.expectedGrossTotal)}
                           </td>
-                          <td className="p-3.5">
-                            {r.age && (
-                              <span
-                                className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${getAgeBadgeStyle(
-                                  r.age.category
-                                )}`}
-                              >
-                                {r.age.displayAge}
-                              </span>
-                            )}
-                          </td>
+
+                          {isCompletedView ? (
+                            <>
+                              <td className="p-3.5 text-slate-700 font-medium">
+                                {formattedCompletedAt}
+                              </td>
+                              <td className="p-3.5">
+                                <span className="inline-flex items-center gap-1 font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md text-[11px]">
+                                  👤 {r.assignedName || "Ejecutor"}
+                                </span>
+                              </td>
+                            </>
+                          ) : (
+                            <td className="p-3.5">
+                              {r.age && (
+                                <span
+                                  className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${getAgeBadgeStyle(
+                                    r.age.category
+                                  )}`}
+                                >
+                                  {r.age.displayAge}
+                                </span>
+                              )}
+                            </td>
+                          )}
+
                           <td className="p-3.5 text-right">
                             {activeTab === "PENDING" ? (
                               <button
@@ -603,12 +690,18 @@ export default function GestionFacturacionPage() {
                               <Link
                                 href={`/gestion/${r.id}`}
                                 className={`inline-block py-1.5 px-3 font-bold rounded-lg transition ${
-                                  isAssignedToMe
+                                  isCompletedView
+                                    ? "bg-slate-800 hover:bg-slate-900 text-white shadow-xs"
+                                    : isAssignedToMe
                                     ? "bg-slate-900 hover:bg-slate-800 text-white"
                                     : "bg-slate-100 hover:bg-slate-200 text-slate-700"
                                 }`}
                               >
-                                {isAssignedToMe ? "Trabajar →" : "Ver detalle"}
+                                {isCompletedView
+                                  ? "Ver detalle"
+                                  : isAssignedToMe
+                                  ? "Trabajar →"
+                                  : "Ver detalle"}
                               </Link>
                             )}
                           </td>
@@ -617,6 +710,46 @@ export default function GestionFacturacionPage() {
                     })}
                   </tbody>
                 </table>
+              </div>
+            )}
+
+            {/* Pagination Controls */}
+            {totalCount > pageSize && (
+              <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
+                <p className="text-xs text-slate-500">
+                  Mostrando{" "}
+                  <span className="font-bold text-slate-700">
+                    {(currentPage - 1) * pageSize + 1}
+                  </span>{" "}
+                  a{" "}
+                  <span className="font-bold text-slate-700">
+                    {Math.min(currentPage * pageSize, totalCount)}
+                  </span>{" "}
+                  de <span className="font-bold text-slate-700">{totalCount}</span> registros
+                </p>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="px-2.5 py-1 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-40 transition"
+                  >
+                    ← Anterior
+                  </button>
+                  <span className="text-xs font-bold text-slate-600 px-2">
+                    Página {currentPage} de {Math.ceil(totalCount / pageSize)}
+                  </span>
+                  <button
+                    onClick={() =>
+                      setCurrentPage((p) =>
+                        p < Math.ceil(totalCount / pageSize) ? p + 1 : p
+                      )
+                    }
+                    disabled={currentPage >= Math.ceil(totalCount / pageSize)}
+                    className="px-2.5 py-1 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-40 transition"
+                  >
+                    Siguiente →
+                  </button>
+                </div>
               </div>
             )}
           </div>

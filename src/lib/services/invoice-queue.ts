@@ -1,4 +1,5 @@
 import { eq, and, sql, desc, asc, count, gte, lte } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { getDb } from "@/lib/db";
 import {
   invoiceRequests,
@@ -142,6 +143,7 @@ export async function getQueueRequestsService(params: {
   search?: string;
   page?: number;
   pageSize?: number;
+  todayOnly?: boolean;
 }): Promise<{ requests: SanitizedInvoiceRequest[]; total: number; page: number; pageSize: number }> {
   const db = getDb();
   if (!db) {
@@ -155,6 +157,12 @@ export async function getQueueRequestsService(params: {
 
   const conditions = [eq(invoiceRequests.status, status)];
 
+  if (params.todayOnly && status === "COMPLETED") {
+    const { startOfDay, endOfDay } = getChileDayBounds();
+    conditions.push(gte(invoiceRequests.completedAt, startOfDay));
+    conditions.push(lte(invoiceRequests.completedAt, endOfDay));
+  }
+
   if (params.warehouseId) {
     conditions.push(eq(invoiceRequests.warehouseId, params.warehouseId));
   }
@@ -163,26 +171,34 @@ export async function getQueueRequestsService(params: {
     conditions.push(eq(invoiceRequests.assignedTo, params.assignedTo));
   }
 
+  const requesterUser = alias(users, "requester_user");
+  const assigneeUser = alias(users, "assignee_user");
+
   if (params.search && params.search.trim()) {
     const term = `%${params.search.trim().toLowerCase()}%`;
     conditions.push(
       sql`(
         LOWER(${invoiceRequests.requestNumber}) LIKE ${term} OR
         LOWER(${invoiceRequests.customerRutSnapshot}) LIKE ${term} OR
-        LOWER(${invoiceRequests.customerLegalNameSnapshot}) LIKE ${term}
+        LOWER(${invoiceRequests.customerLegalNameSnapshot}) LIKE ${term} OR
+        LOWER(COALESCE(${assigneeUser.name}, '')) LIKE ${term}
       )`
     );
   }
 
   // Priority Rule: PENDING queue MUST be ordered created_at ASC (Oldest first)
+  // COMPLETED queue is ordered by completed_at DESC
   const orderClauses =
     status === "PENDING"
       ? [asc(invoiceRequests.createdAt), asc(invoiceRequests.id)]
+      : status === "COMPLETED"
+      ? [desc(invoiceRequests.completedAt), desc(invoiceRequests.createdAt), asc(invoiceRequests.id)]
       : [desc(invoiceRequests.createdAt), asc(invoiceRequests.id)];
 
   const [totalRes] = await db
     .select({ count: count() })
     .from(invoiceRequests)
+    .leftJoin(assigneeUser, eq(invoiceRequests.assignedTo, assigneeUser.id))
     .where(and(...conditions));
 
   const rows = await db
@@ -190,11 +206,13 @@ export async function getQueueRequestsService(params: {
       request: invoiceRequests,
       warehouseName: warehouses.name,
       warehouseCode: warehouses.code,
-      requesterName: users.name,
+      requesterName: requesterUser.name,
+      assignedName: assigneeUser.name,
     })
     .from(invoiceRequests)
     .leftJoin(warehouses, eq(invoiceRequests.warehouseId, warehouses.id))
-    .leftJoin(users, eq(invoiceRequests.requestedBy, users.id))
+    .leftJoin(requesterUser, eq(invoiceRequests.requestedBy, requesterUser.id))
+    .leftJoin(assigneeUser, eq(invoiceRequests.assignedTo, assigneeUser.id))
     .where(and(...conditions))
     .orderBy(...orderClauses)
     .limit(pageSize)
@@ -204,6 +222,7 @@ export async function getQueueRequestsService(params: {
     const req = r.request;
     const sanitized = sanitizeQueueInvoiceRequest(req);
     sanitized.requesterName = r.requesterName || "Solicitante";
+    sanitized.assignedName = r.assignedName || null;
     if (r.warehouseName && r.warehouseCode) {
       sanitized.warehouse = {
         id: req.warehouseId,

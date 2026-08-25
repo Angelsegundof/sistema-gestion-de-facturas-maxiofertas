@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
-import { eq, asc } from "drizzle-orm";
+import { eq, asc, desc, and, gte, lte } from "drizzle-orm";
 import * as schema from "@/lib/db/schema";
 import { runLocalMigrations } from "@/lib/db";
 import { computeAgeIndicator, getQueueCountersService } from "@/lib/services/invoice-queue";
@@ -556,6 +556,146 @@ describe("FASE 10.1F — Temporal Metrics and Executor Management Statistics", (
       expect(ages[0]).toBe("5 días");
       expect(ages[1]).toBe("3 días");
       expect(ages[2]).toBe("1 h");
+    });
+  });
+
+  describe("F10.1H — Historical Completed Invoices and Customer Persistence", () => {
+    it("should differentiate 'Listas hoy' (today only in Chile) from 'Realizadas' (all historical completed)", async () => {
+      const { startOfDay } = getChileDayBounds();
+      const fourDaysAgo = new Date(startOfDay.getTime() - 4 * 24 * 60 * 60 * 1000);
+      const todayNoon = new Date(startOfDay.getTime() + 12 * 60 * 60 * 1000);
+
+      // Invoice 1: Completed 4 days ago
+      await db.insert(schema.invoiceRequests).values({
+        requestNumber: "FAC-HIST-001",
+        warehouseId: testWarehouseId,
+        customerId: testCustomerId,
+        customerRutSnapshot: "76.123.456-0",
+        customerLegalNameSnapshot: "Cliente Antiguo SpA",
+        customerBusinessActivitySnapshot: "Venta al por mayor",
+        expectedGrossTotal: 50000,
+        status: "COMPLETED",
+        requestedBy: warehouseUser.id,
+        assignedTo: executorUser1.id,
+        createdAt: fourDaysAgo,
+        completedAt: fourDaysAgo,
+      });
+
+      // Invoice 2: Completed Today
+      await db.insert(schema.invoiceRequests).values({
+        requestNumber: "FAC-HIST-002",
+        warehouseId: testWarehouseId,
+        customerId: testCustomerId,
+        customerRutSnapshot: "76.123.456-0",
+        customerLegalNameSnapshot: "Cliente Hoy SpA",
+        customerBusinessActivitySnapshot: "Venta al por mayor",
+        expectedGrossTotal: 80000,
+        status: "COMPLETED",
+        requestedBy: warehouseUser.id,
+        assignedTo: executorUser2.id,
+        createdAt: todayNoon,
+        completedAt: todayNoon,
+      });
+
+      // Query 1: Listas hoy (todayOnly = true)
+      const todayOnlyRows = await db
+        .select()
+        .from(schema.invoiceRequests)
+        .where(
+          and(
+            eq(schema.invoiceRequests.status, "COMPLETED"),
+            gte(schema.invoiceRequests.completedAt, startOfDay)
+          )
+        );
+      expect(todayOnlyRows).toHaveLength(1);
+      expect(todayOnlyRows[0].requestNumber).toBe("FAC-HIST-002");
+
+      // Query 2: Realizadas (all completed historical)
+      const allCompletedRows = await db
+        .select()
+        .from(schema.invoiceRequests)
+        .where(eq(schema.invoiceRequests.status, "COMPLETED"))
+        .orderBy(asc(schema.invoiceRequests.completedAt));
+      expect(allCompletedRows).toHaveLength(2);
+      expect(allCompletedRows.map((r) => r.requestNumber)).toEqual([
+        "FAC-HIST-001",
+        "FAC-HIST-002",
+      ]);
+    });
+
+    it("should create customer on first request and reuse the same customer on subsequent requests", async () => {
+      const newRutCanonical = "269856750";
+      const newRutDisplay = "26.985.675-0";
+
+      // 1. Initial check: customer does NOT exist
+      const before = await db
+        .select()
+        .from(schema.customers)
+        .where(eq(schema.customers.rutCanonical, newRutCanonical));
+      expect(before).toHaveLength(0);
+
+      // 2. First request with new RUT
+      const [newCust] = await db
+        .insert(schema.customers)
+        .values({
+          rutCanonical: newRutCanonical,
+          rutDisplay: newRutDisplay,
+          legalName: "Inversiones y Servicios SpA",
+          businessActivity: "Servicios Informáticos",
+          active: true,
+        })
+        .returning();
+      expect(newCust.id).toBeDefined();
+
+      const [req1] = await db
+        .insert(schema.invoiceRequests)
+        .values({
+          requestNumber: "FAC-CUST-001",
+          warehouseId: testWarehouseId,
+          customerId: newCust.id,
+          customerRutSnapshot: newRutDisplay,
+          customerLegalNameSnapshot: "Inversiones y Servicios SpA",
+          customerBusinessActivitySnapshot: "Servicios Informáticos",
+          expectedGrossTotal: 100000,
+          status: "PENDING",
+          requestedBy: warehouseUser.id,
+        })
+        .returning();
+      expect(req1.customerId).toBe(newCust.id);
+
+      // 3. Second request with same RUT: Look up existing customer
+      const lookupResult = await db
+        .select()
+        .from(schema.customers)
+        .where(eq(schema.customers.rutCanonical, newRutCanonical))
+        .limit(1);
+      expect(lookupResult).toHaveLength(1);
+      const existingCustId = lookupResult[0].id;
+      expect(existingCustId).toBe(newCust.id);
+
+      const [req2] = await db
+        .insert(schema.invoiceRequests)
+        .values({
+          requestNumber: "FAC-CUST-002",
+          warehouseId: testWarehouseId,
+          customerId: existingCustId,
+          customerRutSnapshot: newRutDisplay,
+          customerLegalNameSnapshot: "Inversiones y Servicios SpA",
+          customerBusinessActivitySnapshot: "Servicios Informáticos",
+          expectedGrossTotal: 200000,
+          status: "PENDING",
+          requestedBy: warehouseUser.id,
+        })
+        .returning();
+
+      expect(req2.customerId).toBe(newCust.id);
+
+      // Total customers with this canonical RUT must remain 1
+      const totalCustomersWithRut = await db
+        .select()
+        .from(schema.customers)
+        .where(eq(schema.customers.rutCanonical, newRutCanonical));
+      expect(totalCustomersWithRut).toHaveLength(1);
     });
   });
 });
