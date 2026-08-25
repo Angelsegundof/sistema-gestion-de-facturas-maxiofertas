@@ -1,6 +1,6 @@
 import { eq, and, gt } from "drizzle-orm";
 import { cookies } from "next/headers";
-import { getDb } from "../db";
+import { getDb, ensureDbReady } from "../db";
 import { sessions, users, NewSession } from "../db/schema";
 import { generateSessionToken, hashToken } from "./crypto";
 import { SESSION_COOKIE_NAME, SESSION_DURATION_SECONDS } from "./cookies";
@@ -20,6 +20,7 @@ export async function createSession(
   ipAddress?: string | null,
   userAgent?: string | null
 ): Promise<string> {
+  await ensureDbReady();
   const db = getDb();
   if (!db) {
     throw new Error("Database is not configured");
@@ -42,6 +43,7 @@ export async function createSession(
 }
 
 export async function validateSession(rawToken: string): Promise<SessionValidationResult | null> {
+  await ensureDbReady();
   const db = getDb();
   if (!db || !rawToken) {
     return null;
