@@ -60,7 +60,7 @@ export function normalizeWarehouse(
     };
   }
 
-  // 2. Alias normalization dictionary
+  // 2. Alias normalization dictionary for all 16 physical and historical warehouses
   const aliasMap: Record<string, string> = {
     santiago: "CENTRAL",
     stgo: "CENTRAL",
@@ -68,27 +68,81 @@ export function normalizeWarehouse(
     central: "CENTRAL",
     "bodega central": "CENTRAL",
     "stgo central": "CENTRAL",
+    "santiago central": "CENTRAL",
     matriz: "CENTRAL",
-    norte: "NORTE",
-    "bodega norte": "NORTE",
-    antofagasta: "NORTE",
-    sur: "SUR",
-    "bodega sur": "SUR",
-    concepcion: "SUR",
-    "concepción": "SUR",
-    conce: "SUR",
+    rancagua: "RANCAGUA",
+    "bodega rancagua": "RANCAGUA",
+    castro: "CASTRO",
+    "castro chiloe": "CASTRO",
+    "castro chiloé": "CASTRO",
+    chiloe: "CASTRO",
+    chiloé: "CASTRO",
+    "bodega castro chiloe": "CASTRO",
+    "bodega castro chiloé": "CASTRO",
+    concepcion: "CONCEPCION",
+    "concepción": "CONCEPCION",
+    conce: "CONCEPCION",
+    "bodega concepcion": "CONCEPCION",
+    "bodega concepción": "CONCEPCION",
+    temuco: "TEMUCO",
+    "bodega temuco": "TEMUCO",
+    talca: "TALCA",
+    "bodega talca": "TALCA",
+    vina: "VINA",
+    "viña": "VINA",
+    "viña del mar": "VINA",
+    "vina del mar": "VINA",
+    "bodega vina": "VINA",
+    "bodega viña": "VINA",
+    "bodega viña del mar": "VINA",
+    antofagasta: "ANTOFAGASTA",
+    "bodega antofagasta": "ANTOFAGASTA",
+    chillan: "CHILLAN",
+    "chillán": "CHILLAN",
+    "bodega chillan": "CHILLAN",
+    "bodega chillán": "CHILLAN",
+    "pto montt": "PUERTO_MONTT",
+    "puerto montt": "PUERTO_MONTT",
+    "bodega pto montt": "PUERTO_MONTT",
+    "bodega puerto montt": "PUERTO_MONTT",
+    "los angeles": "LOS_ANGELES",
+    "los ángeles": "LOS_ANGELES",
+    "bodega los angeles": "LOS_ANGELES",
+    "bodega los ángeles": "LOS_ANGELES",
+    curico: "CURICO",
+    "curicó": "CURICO",
+    "bodega curico": "CURICO",
+    "bodega curicó": "CURICO",
+    valdivia: "VALDIVIA",
+    "bodega valdivia": "VALDIVIA",
+    "la serena": "LA_SERENA",
+    laserena: "LA_SERENA",
+    serena: "LA_SERENA",
+    "bodega la serena": "LA_SERENA",
+    osorno: "OSORNO",
+    "bodega osorno": "OSORNO",
+    copiapo: "COPIAPO",
+    "copiapó": "COPIAPO",
+    "bodega copiapo": "COPIAPO",
+    "bodega copiapó": "COPIAPO",
   };
 
   const targetCode = aliasMap[clean];
   if (targetCode) {
-    const matched = warehouses.find((w) => w.code.toUpperCase() === targetCode);
-    if (matched) {
-      return {
-        valid: true,
-        warehouseId: matched.id,
-        warehouseCode: matched.code,
-        warehouseName: matched.name,
-      };
+    const candidateCodes = [targetCode];
+    if (targetCode === "CONCEPCION") candidateCodes.push("SUR");
+    if (targetCode === "ANTOFAGASTA") candidateCodes.push("NORTE");
+
+    for (const code of candidateCodes) {
+      const matched = warehouses.find((w) => w.code.toUpperCase() === code);
+      if (matched) {
+        return {
+          valid: true,
+          warehouseId: matched.id,
+          warehouseCode: matched.code,
+          warehouseName: matched.name,
+        };
+      }
     }
   }
 
@@ -141,6 +195,8 @@ export function normalizeStatus(raw?: string): {
     case "corregir":
     case "observada":
     case "con observaciones":
+    case "rut incorrecto":
+    case "datos incorrectos":
     case "needs_correction":
       return { valid: true, status: "NEEDS_CORRECTION" };
 
@@ -150,6 +206,7 @@ export function normalizeStatus(raw?: string): {
     case "lista":
     case "emitida":
     case "ok":
+    case "total corregido":
     case "completed":
       return { valid: true, status: "COMPLETED" };
 
@@ -178,26 +235,37 @@ export function normalizeAmount(raw?: string | number): {
   }
 
   if (typeof raw === "number") {
-    if (isNaN(raw) || raw <= 0 || !Number.isInteger(raw)) {
-      return { valid: false, error: `Monto inválido o no entero: ${raw}` };
+    if (isNaN(raw) || raw <= 0) {
+      return { valid: false, error: `Monto inválido: ${raw}` };
     }
-    return { valid: true, amount: raw };
+    return { valid: true, amount: Math.round(raw) };
   }
 
-  const cleanStr = raw
-    .trim()
-    .replace(/\$/g, "")
-    .replace(/\s+/g, "")
-    .replace(/\./g, "")
-    .replace(/,/g, ".");
+  const rawTrimmed = String(raw).trim();
+  if (rawTrimmed.startsWith("-")) {
+    return { valid: false, error: `Monto negativo no permitido: '${raw}'` };
+  }
 
-  const parsed = Number(cleanStr);
-  if (isNaN(parsed) || parsed <= 0) {
+  const s = rawTrimmed.replace(/\$/g, "").trim();
+  const tokens = s.match(/\b\d+(?:\.\d{3})*(?:,\d+)?\b|\b\d+\b/g);
+  if (!tokens || tokens.length === 0) {
     return { valid: false, error: `Monto numérico no parseable: '${raw}'` };
   }
 
-  const rounded = Math.round(parsed);
-  return { valid: true, amount: rounded };
+  let total = 0;
+  for (const t of tokens) {
+    const clean = t.replace(/\./g, "").replace(/,/g, ".");
+    const val = Number(clean);
+    if (!isNaN(val) && val > 0) {
+      total += Math.round(val);
+    }
+  }
+
+  if (total <= 0) {
+    return { valid: false, error: `Monto total <= 0: '${raw}'` };
+  }
+
+  return { valid: true, amount: total };
 }
 
 export function normalizeDate(raw?: string): {
