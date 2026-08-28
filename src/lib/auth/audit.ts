@@ -48,10 +48,11 @@ export interface LogAuditParams {
   entityId?: string | null;
   metadata?: Record<string, unknown>;
   ipAddress?: string | null;
+  dbOverride?: any;
 }
 
 export async function logAuditEvent(params: LogAuditParams): Promise<void> {
-  const db = getDb();
+  const db = params.dbOverride || getDb();
   if (!db) {
     return;
   }

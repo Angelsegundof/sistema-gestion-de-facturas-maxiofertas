@@ -112,6 +112,7 @@ export async function createDocumentShareTokenService(
       requestNumber: req.requestNumber,
     },
     ipAddress,
+    dbOverride: db,
   });
 
   const baseUrl = origin ? origin.replace(/\/$/, "") : "";
