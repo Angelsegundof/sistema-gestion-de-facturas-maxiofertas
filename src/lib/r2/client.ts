@@ -45,6 +45,11 @@ class CloudflareR2Client implements R2StorageAdapter {
 
   async putObject(options: R2PutObjectOptions): Promise<void> {
     if (!this.client || !this.bucket) {
+      if (process.env.NODE_ENV === "production") {
+        throw new Error(
+          "Cloudflare R2 is not configured in production environment. Refusing in-memory fallback."
+        );
+      }
       // Use local memory fallback in test/dev when R2 credentials are not set
       const bodyBytes =
         options.body instanceof Uint8Array
@@ -69,6 +74,11 @@ class CloudflareR2Client implements R2StorageAdapter {
 
   async getObject(key: string): Promise<R2ObjectData | null> {
     if (!this.client || !this.bucket) {
+      if (process.env.NODE_ENV === "production") {
+        throw new Error(
+          "Cloudflare R2 is not configured in production environment. Refusing in-memory fallback."
+        );
+      }
       let item = this.mockStore.get(key);
       if (!item) {
         // Generate valid synthetic PDF for QA/testing environment
@@ -108,6 +118,11 @@ class CloudflareR2Client implements R2StorageAdapter {
 
   async deleteObject(key: string): Promise<void> {
     if (!this.client || !this.bucket) {
+      if (process.env.NODE_ENV === "production") {
+        throw new Error(
+          "Cloudflare R2 is not configured in production environment. Refusing in-memory fallback."
+        );
+      }
       this.mockStore.delete(key);
       return;
     }
@@ -125,6 +140,11 @@ class CloudflareR2Client implements R2StorageAdapter {
 
   async generatePresignedUploadUrl(options: R2UploadOptions): Promise<string> {
     if (!this.client || !this.bucket) {
+      if (process.env.NODE_ENV === "production") {
+        throw new Error(
+          "Cloudflare R2 is not configured in production environment. Refusing mock URL generation."
+        );
+      }
       return `https://mock-r2.local/upload/${encodeURIComponent(options.key)}?token=mock_upload_token`;
     }
 
@@ -147,6 +167,11 @@ class CloudflareR2Client implements R2StorageAdapter {
     const expires = typeof keyOrOptions === "string" ? expiresInSeconds : keyOrOptions.expiresInSeconds || 900;
 
     if (!this.client || !this.bucket) {
+      if (process.env.NODE_ENV === "production") {
+        throw new Error(
+          "Cloudflare R2 is not configured in production environment. Refusing mock URL generation."
+        );
+      }
       return `https://mock-r2.local/download/${encodeURIComponent(key)}?token=mock_download_token`;
     }
 
