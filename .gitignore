@@ -45,3 +45,9 @@ Thumbs.db
 # Local SQLite / PGlite data
 .data/
 
+# Data and Imports (CRITICAL - No real data in git)
+*.xlsx
+*.xls
+*.csv
+
+
