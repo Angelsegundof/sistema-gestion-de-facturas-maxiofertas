@@ -29,8 +29,9 @@ const envSchema = z.object({
   APP_BASE_URL: urlString(),
   NEXT_PUBLIC_APP_ENV: emptyStringToUndefined(z.enum(["development", "test", "production"]).optional()),
 
-  // Database (PostgreSQL / Neon)
+  // Database (PostgreSQL / Neon - supports DATABASE_URL and POSTGRES_URL)
   DATABASE_URL: emptyStringToUndefined(z.string().min(1).optional()),
+  POSTGRES_URL: emptyStringToUndefined(z.string().min(1).optional()),
 
   // Auth / Session Secrets
   AUTH_SECRET: emptyStringToUndefined(z.string().min(16).optional()),
@@ -88,8 +89,12 @@ export function validateEnv(): Env {
   const bucket = rawData.R2_BUCKET || rawData.CLOUDFLARE_R2_BUCKET_NAME;
   const appUrl = rawData.APP_BASE_URL || rawData.NEXT_PUBLIC_APP_URL || "https://facturas.maxiofertas.cl";
 
+  const dbUrl = rawData.DATABASE_URL || rawData.POSTGRES_URL;
+
   return {
     ...rawData,
+    DATABASE_URL: dbUrl,
+    POSTGRES_URL: dbUrl,
     R2_ACCOUNT_ID: accountId,
     CLOUDFLARE_R2_ACCOUNT_ID: accountId,
     R2_ACCESS_KEY_ID: accessKeyId,

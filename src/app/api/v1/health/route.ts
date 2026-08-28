@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { getDb } from "@/lib/db";
 import { sql } from "drizzle-orm";
 import { ApiResponse, HealthCheckData } from "@/types";
 
@@ -7,10 +7,11 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   let dbStatus: "connected" | "disconnected" | "unconfigured" = "unconfigured";
+  const currentDb = getDb();
 
-  if (db) {
+  if (currentDb) {
     try {
-      await db.execute(sql`SELECT 1`);
+      await currentDb.execute(sql`SELECT 1`);
       dbStatus = "connected";
     } catch {
       dbStatus = "disconnected";

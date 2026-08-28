@@ -94,9 +94,21 @@ export async function runLocalMigrations(pgInstance: PGlite): Promise<void> {
 export type AppDatabase = NeonHttpDatabase<typeof schema> | PgliteDatabase<typeof schema>;
 
 export function getDb(): AppDatabase | null {
-  if (env.DATABASE_URL) {
-    const sql = neon(env.DATABASE_URL);
-    return drizzleNeon(sql, { schema });
+  const dbUrl =
+    process.env.DATABASE_URL ||
+    process.env.POSTGRES_URL ||
+    process.env.POSTGRES_PRISMA_URL ||
+    env.DATABASE_URL ||
+    (env as any).POSTGRES_URL;
+
+  if (dbUrl) {
+    try {
+      const sql = neon(dbUrl);
+      return drizzleNeon(sql, { schema });
+    } catch (err) {
+      console.error("[getDb error connecting to Neon]:", err);
+      return null;
+    }
   }
 
   // Strictly require DATABASE_URL in production
