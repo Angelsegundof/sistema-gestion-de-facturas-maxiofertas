@@ -86,6 +86,7 @@ export async function POST(request: NextRequest) {
   }
 
   const normalizedEmail = parsed.data.email.trim().toLowerCase();
+  await ensureDbReady();
   const db = getDb();
   if (!db) {
     return NextResponse.json<ApiResponse<null>>(

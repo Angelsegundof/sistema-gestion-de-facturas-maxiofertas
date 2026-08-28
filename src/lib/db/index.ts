@@ -15,6 +15,19 @@ declare global {
 }
 
 export async function ensureDbReady(): Promise<void> {
+  const dbUrl =
+    process.env.DATABASE_URL ||
+    process.env.POSTGRES_URL ||
+    process.env.POSTGRES_PRISMA_URL ||
+    env.DATABASE_URL ||
+    (env as any).POSTGRES_URL;
+
+  if (dbUrl) {
+    const { ensureNeonSchema } = await import("./auto-migrate");
+    await ensureNeonSchema(dbUrl);
+    return;
+  }
+
   if (global.__localPgliteReadyPromise) {
     await global.__localPgliteReadyPromise;
   }
