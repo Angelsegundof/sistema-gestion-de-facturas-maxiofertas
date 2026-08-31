@@ -303,6 +303,16 @@ export default function GestionFacturacionPage() {
           </div>
 
           <div className="flex items-center gap-3">
+            {currentUser?.role === "ADMIN" && (
+              <Link
+                href="/admin/usuarios"
+                className="py-2 px-3.5 bg-red-50 hover:bg-red-100 text-red-800 border border-red-200 text-xs font-bold rounded-xl transition flex items-center gap-1.5 shadow-xs"
+              >
+                <span>👥</span>
+                <span>Gestionar Usuarios</span>
+              </Link>
+            )}
+
             {(currentUser?.role === "MANAGEMENT" || currentUser?.role === "ADMIN") && (
               <Link
                 href="/estadisticas"
