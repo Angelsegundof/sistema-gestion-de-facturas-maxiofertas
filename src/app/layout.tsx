@@ -5,6 +5,13 @@ import DevQaSwitcher from "@/components/DevQaSwitcher";
 export const metadata: Metadata = {
   title: "Sistema de Gestión de Facturas — Maxiofertas",
   description: "Sistema interno independiente de gestión y emisión de facturas y notas de crédito de Maxiofertas",
+  icons: {
+    icon: [
+      { url: "/icon.png" },
+      { url: "/favicon.ico" },
+    ],
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 export default function RootLayout({

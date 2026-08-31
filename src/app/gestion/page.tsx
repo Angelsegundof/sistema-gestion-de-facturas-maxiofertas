@@ -285,14 +285,21 @@ export default function GestionFacturacionPage() {
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Top Header */}
         <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-          <div>
-            <span className="text-xs font-bold text-blue-600 uppercase tracking-wider">
-              Mesa Operativa de Facturación
-            </span>
-            <h1 className="text-2xl font-black text-slate-900">Cola de Emisión y Rectificación</h1>
-            <p className="text-xs text-slate-500 mt-1">
-              Sesión activa: <span className="font-semibold text-slate-700">{currentUser?.name}</span> ({currentUser?.role})
-            </p>
+          <div className="flex items-center gap-3.5">
+            <img
+              src="/icon.png"
+              alt="Maxiofertas"
+              className="w-12 h-12 object-contain rounded-xl border border-slate-100 p-0.5 bg-white shadow-xs shrink-0"
+            />
+            <div>
+              <span className="text-xs font-bold text-blue-600 uppercase tracking-wider">
+                Mesa Operativa de Facturación
+              </span>
+              <h1 className="text-2xl font-black text-slate-900">Cola de Emisión y Rectificación</h1>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Sesión activa: <span className="font-semibold text-slate-700">{currentUser?.name}</span> ({currentUser?.role})
+              </p>
+            </div>
           </div>
 
           <div className="flex items-center gap-3">

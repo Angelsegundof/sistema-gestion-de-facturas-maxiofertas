@@ -55,9 +55,11 @@ export default function LoginPage() {
     <main className="flex min-h-screen items-center justify-center bg-slate-100 p-4">
       <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-md border border-slate-200">
         <div className="text-center mb-8">
-          <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-600 text-white font-bold text-2xl mb-3 shadow-sm">
-            M
-          </div>
+          <img
+            src="/icon.png"
+            alt="Maxiofertas"
+            className="inline-block h-16 w-16 mb-3 object-contain rounded-2xl shadow-sm border border-slate-100 p-1 bg-white"
+          />
           <h1 className="text-xl font-bold text-slate-900">
             Sistema de Gestión de Facturas
           </h1>

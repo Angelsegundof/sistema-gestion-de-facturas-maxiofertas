@@ -35,26 +35,11 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const ipAddress = request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "unknown";
+  const rawXff = request.headers.get("x-forwarded-for");
+  const ipAddress = (rawXff ? rawXff.split(",")[0].trim() : request.headers.get("x-real-ip")) || "unknown";
   const userAgent = request.headers.get("user-agent") || "unknown";
 
-  // 2. Validar Rate Limit distribuido por IP
-  const rateCheck = await authRateLimiter.isRateLimited(`ip:${ipAddress}`);
-  if (rateCheck.limited) {
-    const retrySeconds = Math.ceil(rateCheck.retryAfterMs / 1000);
-    return NextResponse.json<ApiResponse<null>>(
-      {
-        success: false,
-        error: {
-          code: "TOO_MANY_REQUESTS",
-          message: `Demasiados intentos de acceso fallidos. Por favor, reintenta en ${retrySeconds} segundos.`,
-        },
-      },
-      { status: 429 }
-    );
-  }
-
-  // 3. Parsear body
+  // 2. Parsear body
   let body: unknown;
   try {
     body = await request.json();
@@ -86,6 +71,31 @@ export async function POST(request: NextRequest) {
   }
 
   const normalizedEmail = parsed.data.email.trim().toLowerCase();
+
+  // 3. Validar Rate Limit distribuido (por cuenta e IP compartida)
+  const emailRateKey = `login:${normalizedEmail}:${ipAddress}`;
+  const ipRateKey = `ip:${ipAddress}`;
+
+  const [rateCheckEmail, rateCheckIp] = await Promise.all([
+    authRateLimiter.isRateLimited(emailRateKey, 5, 15 * 60 * 1000),
+    authRateLimiter.isRateLimited(ipRateKey, 30, 15 * 60 * 1000),
+  ]);
+
+  if (rateCheckEmail.limited || rateCheckIp.limited) {
+    const retryAfterMs = Math.max(rateCheckEmail.retryAfterMs, rateCheckIp.retryAfterMs);
+    const retrySeconds = Math.ceil(retryAfterMs / 1000);
+    return NextResponse.json<ApiResponse<null>>(
+      {
+        success: false,
+        error: {
+          code: "TOO_MANY_REQUESTS",
+          message: `Demasiados intentos de acceso fallidos. Por favor, reintenta en ${retrySeconds} segundos.`,
+        },
+      },
+      { status: 429 }
+    );
+  }
+
   await ensureDbReady();
   const db = getDb();
   if (!db) {
@@ -114,7 +124,10 @@ export async function POST(request: NextRequest) {
   };
 
   if (userList.length === 0) {
-    await authRateLimiter.recordAttempt(`ip:${ipAddress}`);
+    await Promise.all([
+      authRateLimiter.recordAttempt(emailRateKey, 15 * 60 * 1000),
+      authRateLimiter.recordAttempt(ipRateKey, 15 * 60 * 1000),
+    ]);
     await logAuditEvent({
       action: "LOGIN_FAILED",
       entityType: "users",
@@ -131,7 +144,10 @@ export async function POST(request: NextRequest) {
 
   // 5. Verificar si el usuario está activo
   if (!user.active) {
-    await authRateLimiter.recordAttempt(`ip:${ipAddress}`);
+    await Promise.all([
+      authRateLimiter.recordAttempt(emailRateKey, 15 * 60 * 1000),
+      authRateLimiter.recordAttempt(ipRateKey, 15 * 60 * 1000),
+    ]);
     await logAuditEvent({
       userId: user.id,
       action: "LOGIN_FAILED",
@@ -149,7 +165,10 @@ export async function POST(request: NextRequest) {
   // 6. Verificar contraseña
   const isPasswordValid = await verifyPassword(parsed.data.password, user.passwordHash);
   if (!isPasswordValid) {
-    await authRateLimiter.recordAttempt(`ip:${ipAddress}`);
+    await Promise.all([
+      authRateLimiter.recordAttempt(emailRateKey, 15 * 60 * 1000),
+      authRateLimiter.recordAttempt(ipRateKey, 15 * 60 * 1000),
+    ]);
     await logAuditEvent({
       userId: user.id,
       action: "LOGIN_FAILED",
@@ -165,7 +184,10 @@ export async function POST(request: NextRequest) {
   }
 
   // 7. Resetear rate limiter al tener éxito
-  await authRateLimiter.reset(`ip:${ipAddress}`);
+  await Promise.all([
+    authRateLimiter.reset(emailRateKey),
+    authRateLimiter.reset(ipRateKey),
+  ]);
 
   // 8. Crear sesión
   const sessionToken = await createSession(user.id, ipAddress, userAgent);

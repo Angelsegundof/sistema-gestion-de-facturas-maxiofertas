@@ -25,9 +25,11 @@ export default async function HomePage() {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center p-6 bg-slate-50">
         <div className="w-full max-w-lg p-8 bg-white rounded-2xl shadow-sm border border-slate-200 text-center">
-          <div className="inline-flex items-center justify-center w-16 h-16 mb-4 rounded-2xl bg-blue-600 text-white font-bold text-2xl shadow-sm">
-            M
-          </div>
+          <img
+            src="/icon.png"
+            alt="Maxiofertas"
+            className="inline-block w-16 h-16 mb-4 object-contain rounded-2xl shadow-sm border border-slate-100 p-1 bg-white"
+          />
           <h1 className="text-2xl font-bold text-slate-900 mb-2">
             Sistema de Gestión de Facturas Maxiofertas
           </h1>
@@ -60,9 +62,11 @@ export default async function HomePage() {
       <div className="max-w-5xl mx-auto space-y-6">
         <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-6 bg-white rounded-2xl border border-slate-200 shadow-sm">
           <div className="flex items-center gap-4">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-blue-600 text-white font-bold text-xl shadow-sm">
-              M
-            </div>
+            <img
+              src="/icon.png"
+              alt="Maxiofertas"
+              className="inline-block w-12 h-12 object-contain rounded-xl shadow-sm border border-slate-100 p-0.5 bg-white shrink-0"
+            />
             <div>
               <h1 className="text-lg font-bold text-slate-900">
                 Sistema de Gestión de Facturas
