@@ -59,6 +59,7 @@ class CloudflareR2Client implements R2StorageAdapter {
           accessKeyId,
           secretAccessKey,
         },
+        forcePathStyle: true,
       });
       return true;
     }
