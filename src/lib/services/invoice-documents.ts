@@ -171,9 +171,10 @@ export async function uploadInvoiceDocumentService(
       body: file.buffer,
       contentType: "application/pdf",
     });
-  } catch (error) {
+  } catch (error: any) {
+    const errorDetails = error?.message || error?.name || error?.Code || "Error desconocido";
     console.error("Error uploading object to R2:", error);
-    throw new Error("STORAGE_ERROR: No se pudo subir el archivo al almacenamiento R2.");
+    throw new Error(`STORAGE_ERROR: No se pudo subir el archivo a R2 (${errorDetails})`);
   }
 
   // 2. Persist record in PostgreSQL (with compensation if DB fails)
