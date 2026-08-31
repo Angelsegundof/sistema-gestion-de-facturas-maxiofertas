@@ -21,30 +21,58 @@ class CloudflareR2Client implements R2StorageAdapter {
   private mockStore: Map<string, { body: Uint8Array; contentType: string }> = new Map();
 
   constructor() {
-    if (
-      env.R2_ACCOUNT_ID &&
-      env.R2_ACCESS_KEY_ID &&
-      env.R2_SECRET_ACCESS_KEY &&
-      env.R2_BUCKET
-    ) {
-      this.bucket = env.R2_BUCKET;
+    this.ensureInitialized();
+  }
+
+  private ensureInitialized(): boolean {
+    if (this.client && this.bucket) {
+      return true;
+    }
+
+    const accountId =
+      process.env.CLOUDFLARE_R2_ACCOUNT_ID ||
+      process.env.R2_ACCOUNT_ID ||
+      env.CLOUDFLARE_R2_ACCOUNT_ID ||
+      env.R2_ACCOUNT_ID;
+    const accessKeyId =
+      process.env.CLOUDFLARE_R2_ACCESS_KEY_ID ||
+      process.env.R2_ACCESS_KEY_ID ||
+      env.CLOUDFLARE_R2_ACCESS_KEY_ID ||
+      env.R2_ACCESS_KEY_ID;
+    const secretAccessKey =
+      process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY ||
+      process.env.R2_SECRET_ACCESS_KEY ||
+      env.CLOUDFLARE_R2_SECRET_ACCESS_KEY ||
+      env.R2_SECRET_ACCESS_KEY;
+    const bucket =
+      process.env.CLOUDFLARE_R2_BUCKET_NAME ||
+      process.env.R2_BUCKET ||
+      env.CLOUDFLARE_R2_BUCKET_NAME ||
+      env.R2_BUCKET;
+
+    if (accountId && accessKeyId && secretAccessKey && bucket) {
+      this.bucket = bucket;
       this.client = new S3Client({
         region: "auto",
-        endpoint: `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+        endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
         credentials: {
-          accessKeyId: env.R2_ACCESS_KEY_ID,
-          secretAccessKey: env.R2_SECRET_ACCESS_KEY,
+          accessKeyId,
+          secretAccessKey,
         },
       });
+      return true;
     }
+
+    return false;
   }
 
   isConfigured(): boolean {
-    return this.client !== null && this.bucket !== null;
+    return this.ensureInitialized();
   }
 
   async putObject(options: R2PutObjectOptions): Promise<void> {
-    if (!this.client || !this.bucket) {
+    const isReady = this.ensureInitialized();
+    if (!isReady || !this.client || !this.bucket) {
       if (process.env.NODE_ENV === "production") {
         throw new Error(
           "Cloudflare R2 is not configured in production environment. Refusing in-memory fallback."
@@ -62,18 +90,29 @@ class CloudflareR2Client implements R2StorageAdapter {
       return;
     }
 
-    const command = new PutObjectCommand({
-      Bucket: this.bucket,
-      Key: options.key,
-      Body: options.body,
-      ContentType: options.contentType,
-    });
+    try {
+      const command = new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: options.key,
+        Body: options.body,
+        ContentType: options.contentType,
+      });
 
-    await this.client.send(command);
+      await this.client.send(command);
+    } catch (err: any) {
+      console.error("[R2 PutObject Error]:", {
+        bucket: this.bucket,
+        key: options.key,
+        message: err?.message,
+        code: err?.Code || err?.name,
+      });
+      throw err;
+    }
   }
 
   async getObject(key: string): Promise<R2ObjectData | null> {
-    if (!this.client || !this.bucket) {
+    const isReady = this.ensureInitialized();
+    if (!isReady || !this.client || !this.bucket) {
       if (process.env.NODE_ENV === "production") {
         throw new Error(
           "Cloudflare R2 is not configured in production environment. Refusing in-memory fallback."
@@ -111,13 +150,15 @@ class CloudflareR2Client implements R2StorageAdapter {
         contentType: response.ContentType || "application/octet-stream",
         contentLength: response.ContentLength || byteArray.byteLength,
       };
-    } catch {
+    } catch (err) {
+      console.error("[R2 GetObject Error]:", key, err);
       return null;
     }
   }
 
   async deleteObject(key: string): Promise<void> {
-    if (!this.client || !this.bucket) {
+    const isReady = this.ensureInitialized();
+    if (!isReady || !this.client || !this.bucket) {
       if (process.env.NODE_ENV === "production") {
         throw new Error(
           "Cloudflare R2 is not configured in production environment. Refusing in-memory fallback."
@@ -134,12 +175,13 @@ class CloudflareR2Client implements R2StorageAdapter {
       });
       await this.client.send(command);
     } catch (error) {
-      console.error("Error deleting object from R2:", error);
+      console.error("[R2 DeleteObject Error]:", key, error);
     }
   }
 
   async generatePresignedUploadUrl(options: R2UploadOptions): Promise<string> {
-    if (!this.client || !this.bucket) {
+    const isReady = this.ensureInitialized();
+    if (!isReady || !this.client || !this.bucket) {
       if (process.env.NODE_ENV === "production") {
         throw new Error(
           "Cloudflare R2 is not configured in production environment. Refusing mock URL generation."
@@ -166,7 +208,8 @@ class CloudflareR2Client implements R2StorageAdapter {
     const key = typeof keyOrOptions === "string" ? keyOrOptions : keyOrOptions.key;
     const expires = typeof keyOrOptions === "string" ? expiresInSeconds : keyOrOptions.expiresInSeconds || 900;
 
-    if (!this.client || !this.bucket) {
+    const isReady = this.ensureInitialized();
+    if (!isReady || !this.client || !this.bucket) {
       if (process.env.NODE_ENV === "production") {
         throw new Error(
           "Cloudflare R2 is not configured in production environment. Refusing mock URL generation."
@@ -234,5 +277,3 @@ startxref
 }
 
 export const r2Client = new CloudflareR2Client();
-
-

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/auth";
+
+export const dynamic = "force-dynamic";
 import { verifyCsrfOrigin } from "@/lib/auth/csrf";
 import { uploadInvoiceDocumentService } from "@/lib/services/invoice-documents";
 import { ApiResponse, SanitizedDocument } from "@/types";
