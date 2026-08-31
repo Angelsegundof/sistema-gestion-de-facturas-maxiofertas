@@ -7,14 +7,28 @@ interface RateLimitCheckResult {
   retryAfterMs: number;
 }
 
+export const TRUSTED_EXCLUDED_IPS = new Set(["200.28.138.101", "127.0.0.1", "::1"]);
+
 class DistributedRateLimiter {
   private memoryFallback: Map<string, { count: number; resetAt: number }> = new Map();
+
+  private isTrustedKey(key: string): boolean {
+    if (key.startsWith("ip:")) {
+      const ip = key.replace("ip:", "").trim();
+      return TRUSTED_EXCLUDED_IPS.has(ip);
+    }
+    return false;
+  }
 
   async isRateLimited(
     key: string,
     maxAttempts = 5,
     windowMs = 15 * 60 * 1000
   ): Promise<RateLimitCheckResult> {
+    if (this.isTrustedKey(key)) {
+      return { limited: false, retryAfterMs: 0 };
+    }
+
     const db = getDb();
     const now = new Date();
 
@@ -58,6 +72,8 @@ class DistributedRateLimiter {
   }
 
   async recordAttempt(key: string, windowMs = 15 * 60 * 1000): Promise<void> {
+    if (this.isTrustedKey(key)) return;
+
     const db = getDb();
     const now = new Date();
     const resetAt = new Date(now.getTime() + windowMs);

@@ -70,15 +70,23 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const normalizedEmail = parsed.data.email.trim().toLowerCase();
+  const rawEmail = parsed.data.email.trim().toLowerCase();
+  const EMAIL_ALIASES: Record<string, string> = {
+    "keyla.maxiofertas@gmail.com": "keila.maxiofertas@gmail.com",
+    "jenimaxiofetas@gmail.com": "jenimaxiofertas@gmail.com",
+    "jenimaxlofetas@gmail.com": "jenimaxiofertas@gmail.com",
+    "jenimaxlofetás@gmail.com": "jenimaxiofertas@gmail.com",
+  };
+  const normalizedEmail = EMAIL_ALIASES[rawEmail] || rawEmail;
 
   // 3. Validar Rate Limit distribuido (por cuenta e IP compartida)
+  const isTrustedIp = ipAddress === "200.28.138.101" || ipAddress === "127.0.0.1";
   const emailRateKey = `login:${normalizedEmail}:${ipAddress}`;
   const ipRateKey = `ip:${ipAddress}`;
 
   const [rateCheckEmail, rateCheckIp] = await Promise.all([
-    authRateLimiter.isRateLimited(emailRateKey, 5, 15 * 60 * 1000),
-    authRateLimiter.isRateLimited(ipRateKey, 30, 15 * 60 * 1000),
+    isTrustedIp ? { limited: false, retryAfterMs: 0 } : authRateLimiter.isRateLimited(emailRateKey, 5, 15 * 60 * 1000),
+    isTrustedIp ? { limited: false, retryAfterMs: 0 } : authRateLimiter.isRateLimited(ipRateKey, 30, 15 * 60 * 1000),
   ]);
 
   if (rateCheckEmail.limited || rateCheckIp.limited) {
