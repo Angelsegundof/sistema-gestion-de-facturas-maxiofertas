@@ -1,4 +1,4 @@
-import { eq, and, sql, desc, asc, count } from "drizzle-orm";
+import { eq, and, sql, desc, asc, count, inArray } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import {
   invoiceRequests,
@@ -258,7 +258,7 @@ export async function getRectificationsQueueService(
   currentUser: SanitizedUser,
   params: {
     status?: RectificationStatus | "ALL";
-    warehouseId?: string;
+    warehouseId?: string | string[];
     search?: string;
     page?: number;
     pageSize?: number;
@@ -295,7 +295,14 @@ export async function getRectificationsQueueService(
   }
 
   if (params.warehouseId) {
-    conditions.push(eq(invoiceRequests.warehouseId, params.warehouseId));
+    const ids = Array.isArray(params.warehouseId)
+      ? params.warehouseId.filter(Boolean)
+      : params.warehouseId.split(",").map((s) => s.trim()).filter(Boolean);
+    if (ids.length === 1) {
+      conditions.push(eq(invoiceRequests.warehouseId, ids[0]));
+    } else if (ids.length > 1) {
+      conditions.push(inArray(invoiceRequests.warehouseId, ids));
+    }
   }
 
   if (params.search && params.search.trim()) {

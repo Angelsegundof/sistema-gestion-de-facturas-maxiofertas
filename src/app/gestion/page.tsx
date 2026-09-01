@@ -14,6 +14,7 @@ import {
   AgeCategory,
   RectificationReason,
 } from "@/domain/types";
+import { WarehouseMultiSelect } from "@/components/WarehouseMultiSelect";
 
 const REASON_LABELS: Record<RectificationReason, string> = {
   RUT: "RUT",
@@ -30,7 +31,7 @@ export default function GestionFacturacionPage() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<SanitizedUser | null>(null);
   const [warehouses, setWarehouses] = useState<SanitizedWarehouse[]>([]);
-  const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>("");
+  const [selectedWarehouseIds, setSelectedWarehouseIds] = useState<string[]>([]);
   const [loadingUser, setLoadingUser] = useState(true);
 
   // Queue state
@@ -110,7 +111,7 @@ export default function GestionFacturacionPage() {
       try {
         setLoadingQueue(true);
         const searchParam = searchTerm.trim() ? `&search=${encodeURIComponent(searchTerm.trim())}` : "";
-        const whParam = selectedWarehouseId ? `&warehouseId=${encodeURIComponent(selectedWarehouseId)}` : "";
+        const whParam = selectedWarehouseIds.length > 0 ? `&warehouseId=${encodeURIComponent(selectedWarehouseIds.join(","))}` : "";
         const pageParam = `&page=${currentPage}&pageSize=${pageSize}`;
 
         if (activeTab === "RECTIFICATIONS") {
@@ -166,13 +167,13 @@ export default function GestionFacturacionPage() {
     return () => {
       isMounted = false;
     };
-  }, [currentUser, activeTab, searchTerm, selectedWarehouseId, currentPage]);
+  }, [currentUser, activeTab, searchTerm, selectedWarehouseIds, currentPage]);
 
   const refreshQueue = async () => {
     setLoadingQueue(true);
     try {
       const searchParam = searchTerm.trim() ? `&search=${encodeURIComponent(searchTerm.trim())}` : "";
-      const whParam = selectedWarehouseId ? `&warehouseId=${encodeURIComponent(selectedWarehouseId)}` : "";
+      const whParam = selectedWarehouseIds.length > 0 ? `&warehouseId=${encodeURIComponent(selectedWarehouseIds.join(","))}` : "";
       if (activeTab === "RECTIFICATIONS") {
         const res = await fetch(`/api/v1/rectifications?page=1&pageSize=50${searchParam}${whParam}`);
         const data = await res.json();
@@ -476,22 +477,16 @@ export default function GestionFacturacionPage() {
           </div>
 
           <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
-            {/* Bodega Selector */}
-            <select
-              value={selectedWarehouseId}
-              onChange={(e) => {
-                setSelectedWarehouseId(e.target.value);
+            {/* Bodega Multi-Select Filter */}
+            <WarehouseMultiSelect
+              warehouses={warehouses}
+              selectedIds={selectedWarehouseIds}
+              onChange={(newIds) => {
+                setSelectedWarehouseIds(newIds);
                 setCurrentPage(1);
               }}
-              className="w-full sm:w-auto px-3 py-1.5 text-xs font-semibold bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-            >
-              <option value="">Bodega: Todas</option>
-              {warehouses.map((w) => (
-                <option key={w.id} value={w.id}>
-                  {w.name}
-                </option>
-              ))}
-            </select>
+              className="w-full sm:w-auto"
+            />
 
             <div className="w-full sm:w-64">
               <input

@@ -1,4 +1,4 @@
-import { eq, and, sql, desc, asc, count, gte, lte } from "drizzle-orm";
+import { eq, and, sql, desc, asc, count, gte, lte, inArray } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { getDb } from "@/lib/db";
 import {
@@ -31,6 +31,17 @@ import {
   SanitizedRequestCorrection,
   SanitizedUser,
 } from "@/domain/types";
+
+function buildWarehouseCondition(warehouseId?: string | string[]) {
+  if (!warehouseId) return undefined;
+  const ids = Array.isArray(warehouseId)
+    ? warehouseId.filter(Boolean)
+    : warehouseId.split(",").map((s) => s.trim()).filter(Boolean);
+
+  if (ids.length === 0) return undefined;
+  if (ids.length === 1) return eq(invoiceRequests.warehouseId, ids[0]);
+  return inArray(invoiceRequests.warehouseId, ids);
+}
 
 export function computeAgeIndicator(createdAt: Date | string): AgeIndicator {
   const createdDate = typeof createdAt === "string" ? new Date(createdAt) : createdAt;
@@ -70,7 +81,7 @@ export function computeAgeIndicator(createdAt: Date | string): AgeIndicator {
 }
 
 export async function getQueueCountersService(
-  warehouseId?: string,
+  warehouseId?: string | string[],
   dbOverride?: unknown
 ): Promise<QueueSummaryCounters> {
   const db = (dbOverride as ReturnType<typeof getDb>) || getDb();
@@ -89,11 +100,12 @@ export async function getQueueCountersService(
     lte(invoiceRequests.completedAt, endOfDay),
   ];
 
-  if (warehouseId) {
-    pendingConds.push(eq(invoiceRequests.warehouseId, warehouseId));
-    inProgressConds.push(eq(invoiceRequests.warehouseId, warehouseId));
-    needsCorrectionConds.push(eq(invoiceRequests.warehouseId, warehouseId));
-    completedTodayConds.push(eq(invoiceRequests.warehouseId, warehouseId));
+  const whCond = buildWarehouseCondition(warehouseId);
+  if (whCond) {
+    pendingConds.push(whCond);
+    inProgressConds.push(whCond);
+    needsCorrectionConds.push(whCond);
+    completedTodayConds.push(whCond);
   }
 
   const [pendingRes] = await db
@@ -123,7 +135,7 @@ export async function getQueueCountersService(
     .where(
       and(
         sql`${rectifications.status} IN ('REQUESTED', 'IN_PROGRESS', 'CREDIT_NOTE_REGISTERED', 'NEW_INVOICE_PENDING')`,
-        warehouseId ? eq(invoiceRequests.warehouseId, warehouseId) : sql`1=1`
+        whCond || sql`1=1`
       )
     );
 
@@ -138,7 +150,7 @@ export async function getQueueCountersService(
 
 export async function getQueueRequestsService(params: {
   status?: InvoiceRequestStatus;
-  warehouseId?: string;
+  warehouseId?: string | string[];
   assignedTo?: string;
   search?: string;
   page?: number;
@@ -163,8 +175,9 @@ export async function getQueueRequestsService(params: {
     conditions.push(lte(invoiceRequests.completedAt, endOfDay));
   }
 
-  if (params.warehouseId) {
-    conditions.push(eq(invoiceRequests.warehouseId, params.warehouseId));
+  const whCond = buildWarehouseCondition(params.warehouseId);
+  if (whCond) {
+    conditions.push(whCond);
   }
 
   if (params.assignedTo) {
