@@ -12,6 +12,7 @@ import {
 import { calculateRequestTotals } from "@/domain/pricing";
 import { formatRut, normalizeRut, validateRut } from "@/lib/validation/rut";
 import { logAuditEvent } from "@/lib/auth/audit";
+import { hasPermission } from "@/domain/permissions";
 import {
   DuplicateCandidate,
   SanitizedInvoiceRequest,
@@ -377,11 +378,7 @@ export async function updatePendingInvoiceRequestService(
   }
 
   // 1. Verificar permisos RBAC
-  if (
-    currentUser.role !== "INVOICE_EXECUTOR" &&
-    currentUser.role !== "MANAGEMENT" &&
-    currentUser.role !== "ADMIN"
-  ) {
+  if (!hasPermission(currentUser.role, "REQUEST_EDIT_PENDING")) {
     throw new Error("FORBIDDEN: No tienes permisos para modificar solicitudes de facturación.");
   }
 
@@ -397,6 +394,15 @@ export async function updatePendingInvoiceRequestService(
   }
 
   const targetReq = existingReqList[0];
+
+  // 2.1 Verificar ownership / IDOR para usuarios de bodega (solicitantes)
+  if (currentUser.role === "WAREHOUSE_USER") {
+    const isOwner = targetReq.requestedBy === currentUser.id;
+    const isSameWarehouse = currentUser.warehouseId && targetReq.warehouseId === currentUser.warehouseId;
+    if (!isOwner && !isSameWarehouse) {
+      throw new Error("FORBIDDEN: No tienes permisos para modificar solicitudes de otros usuarios o bodegas.");
+    }
+  }
 
   if (targetReq.status !== "PENDING") {
     throw new Error(
@@ -537,11 +543,12 @@ export async function updatePendingInvoiceRequestService(
   // 8. Registro de auditoría
   await logAuditEvent({
     userId: currentUser.id,
-    action: "INVOICE_REQUEST_UPDATED_WHILE_PENDING",
+    action: currentUser.role === "WAREHOUSE_USER" ? "INVOICE_REQUEST_UPDATED_BY_REQUESTER" : "INVOICE_REQUEST_UPDATED_WHILE_PENDING",
     entityType: "invoice_requests",
     entityId: updatedReq.id,
     metadata: {
       requestNumber: updatedReq.requestNumber,
+      actorRole: currentUser.role,
       previousGrossTotal: targetReq.expectedGrossTotal,
       newGrossTotal: updatedReq.expectedGrossTotal,
       previousCustomerRut: targetReq.customerRutSnapshot,

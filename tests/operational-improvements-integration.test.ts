@@ -14,13 +14,15 @@ import { SanitizedUser } from "@/domain/types";
 import * as fs from "fs";
 import * as path from "path";
 
-describe("Operational Improvements Integration Tests (Mejoras 1, 2, 3)", () => {
+describe("Operational Improvements Integration Tests (Mejoras 1, 2, 3 - Refined)", () => {
   let pglite: PGlite;
   let db: ReturnType<typeof drizzle<typeof schema>>;
   let managementUser: SanitizedUser;
   let executorUser: SanitizedUser;
-  let warehouseUser: SanitizedUser;
-  let testWarehouse: schema.Warehouse;
+  let warehouseUserA: SanitizedUser;
+  let warehouseUserB: SanitizedUser;
+  let warehouseA: schema.Warehouse;
+  let warehouseB: schema.Warehouse;
 
   beforeEach(async () => {
     pglite = new PGlite();
@@ -51,9 +53,13 @@ describe("Operational Improvements Integration Tests (Mejoras 1, 2, 3)", () => {
 
     const insertedWarehouses: schema.Warehouse[] = await db
       .insert(schema.warehouses)
-      .values({ code: "STGO-01", name: "Bodega Santiago Central", active: true })
+      .values([
+        { code: "STGO-01", name: "Bodega Santiago Central", active: true },
+        { code: "OSR-01", name: "Bodega Osorno", active: true },
+      ])
       .returning();
-    testWarehouse = insertedWarehouses[0];
+    warehouseA = insertedWarehouses[0];
+    warehouseB = insertedWarehouses[1];
 
     const insertedUsers: schema.User[] = await db
       .insert(schema.users)
@@ -75,11 +81,19 @@ describe("Operational Improvements Integration Tests (Mejoras 1, 2, 3)", () => {
           active: true,
         },
         {
-          email: "bodega@maxiofertas.cl",
+          email: "bodega.stgo@maxiofertas.cl",
+          name: "Bodega Santiago",
+          passwordHash: "hash123",
+          role: "WAREHOUSE_USER",
+          warehouseId: warehouseA.id,
+          active: true,
+        },
+        {
+          email: "bodega.osorno@maxiofertas.cl",
           name: "Bodega Osorno",
           passwordHash: "hash123",
           role: "WAREHOUSE_USER",
-          warehouseId: testWarehouse.id,
+          warehouseId: warehouseB.id,
           active: true,
         },
       ])
@@ -108,7 +122,7 @@ describe("Operational Improvements Integration Tests (Mejoras 1, 2, 3)", () => {
       updatedAt: nowIso,
     };
 
-    warehouseUser = {
+    warehouseUserA = {
       id: insertedUsers[2].id,
       email: insertedUsers[2].email,
       name: insertedUsers[2].name,
@@ -118,20 +132,31 @@ describe("Operational Improvements Integration Tests (Mejoras 1, 2, 3)", () => {
       createdAt: nowIso,
       updatedAt: nowIso,
     };
+
+    warehouseUserB = {
+      id: insertedUsers[3].id,
+      email: insertedUsers[3].email,
+      name: insertedUsers[3].name,
+      role: insertedUsers[3].role,
+      warehouseId: insertedUsers[3].warehouseId,
+      active: insertedUsers[3].active,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    };
   });
 
   describe("Mejora 1 — Permisos y Operación de Facturación por Gerencia / Finanzas (MANAGEMENT)", () => {
-    it("should allow MANAGEMENT to possess operational and supervise capabilities in RBAC matrix", () => {
+    it("should allow MANAGEMENT to possess operational capabilities but NOT pending edit capability", () => {
       expect(hasPermission("MANAGEMENT", "REQUEST_CLAIM")).toBe(true);
       expect(hasPermission("MANAGEMENT", "INVOICE_FINALIZE")).toBe(true);
       expect(hasPermission("MANAGEMENT", "INVOICE_UPLOAD_PDF")).toBe(true);
-      expect(hasPermission("MANAGEMENT", "REQUEST_EDIT_PENDING")).toBe(true);
       expect(hasPermission("MANAGEMENT", "STATS_VIEW")).toBe(true);
       expect(hasPermission("MANAGEMENT", "AUDIT_VIEW")).toBe(true);
+      expect(hasPermission("MANAGEMENT", "REQUEST_EDIT_PENDING")).toBe(false);
     });
 
     it("should allow a MANAGEMENT user to claim a PENDING request and register their actual userId", async () => {
-      const createRes = await createInvoiceRequestService(warehouseUser, {
+      const createRes = await createInvoiceRequestService(warehouseUserA, {
         customer: {
           rut: "76.432.109-K",
           legalName: "Cliente Test SpA",
@@ -166,7 +191,7 @@ describe("Operational Improvements Integration Tests (Mejoras 1, 2, 3)", () => {
 
   describe("Mejora 2 — Datos de Contacto de Clientes", () => {
     it("should store and expose customer contact info snapshots for the requester", async () => {
-      const createRes = await createInvoiceRequestService(warehouseUser, {
+      const createRes = await createInvoiceRequestService(warehouseUserA, {
         customer: {
           rut: "76.432.109-K",
           legalName: "Distribuidora Mayorista SpA",
@@ -192,9 +217,9 @@ describe("Operational Improvements Integration Tests (Mejoras 1, 2, 3)", () => {
     });
   });
 
-  describe("Mejora 3 — Edición de Solicitudes PENDING por el Ejecutor / Gerencia", () => {
-    it("should allow modifying customer, products, notes on a PENDING request and recalculate totals deterministically", async () => {
-      const createRes = await createInvoiceRequestService(warehouseUser, {
+  describe("Mejora 3 — Edición de Solicitudes PENDING por el Solicitante (WAREHOUSE_USER)", () => {
+    it("should allow WAREHOUSE_USER to edit their own PENDING request and recalculate totals deterministically", async () => {
+      const createRes = await createInvoiceRequestService(warehouseUserA, {
         customer: {
           rut: "76.432.109-K",
           legalName: "Nombre Anterior",
@@ -214,10 +239,10 @@ describe("Operational Improvements Integration Tests (Mejoras 1, 2, 3)", () => {
 
       if (!("request" in createRes)) throw new Error("Request creation failed");
 
-      const updated = await updatePendingInvoiceRequestService(executorUser, createRes.request.id, {
+      const updated = await updatePendingInvoiceRequestService(warehouseUserA, createRes.request.id, {
         customer: {
           rut: "76.432.109-K",
-          legalName: "Nombre Modificado y Corregido",
+          legalName: "Nombre Modificado por Bodega",
           businessActivity: "Giro Modificado",
           phone: "+56988887777",
           email: "new@test.cl",
@@ -234,16 +259,16 @@ describe("Operational Improvements Integration Tests (Mejoras 1, 2, 3)", () => {
             unitPriceGross: 15000,
           },
         ],
-        notes: "Nota modificada por ejecutor",
+        notes: "Nota modificada por encargado de bodega",
       });
 
       // Total esperado: 3 * 20000 + 2 * 15000 = 60000 + 30000 = 90000
       expect(updated.expectedGrossTotal).toBe(90000);
-      expect(updated.customerLegalNameSnapshot).toBe("Nombre Modificado y Corregido");
+      expect(updated.customerLegalNameSnapshot).toBe("Nombre Modificado por Bodega");
       expect(updated.customerBusinessActivitySnapshot).toBe("Giro Modificado");
       expect(updated.customerPhoneSnapshot).toBe("+56988887777");
       expect(updated.customerEmailSnapshot).toBe("new@test.cl");
-      expect(updated.notes).toBe("Nota modificada por ejecutor");
+      expect(updated.notes).toBe("Nota modificada por encargado de bodega");
       expect(updated.items?.length).toBe(2);
 
       // Verify audit log
@@ -252,14 +277,106 @@ describe("Operational Improvements Integration Tests (Mejoras 1, 2, 3)", () => {
         .from(schema.auditLogs)
         .where(eq(schema.auditLogs.entityId, createRes.request.id));
       const editEvent = auditEvents.find(
-        (a) => a.action === "INVOICE_REQUEST_UPDATED_WHILE_PENDING"
+        (a) => a.action === "INVOICE_REQUEST_UPDATED_BY_REQUESTER"
       );
       expect(editEvent).toBeDefined();
-      expect(editEvent?.userId).toBe(executorUser.id);
+      expect(editEvent?.userId).toBe(warehouseUserA.id);
     });
 
-    it("should reject modification if request status is already IN_PROGRESS (Conflict 409)", async () => {
-      const createRes = await createInvoiceRequestService(warehouseUser, {
+    it("should prevent WAREHOUSE_USER B from editing a request created by WAREHOUSE_USER A (IDOR / Forbidden)", async () => {
+      const createRes = await createInvoiceRequestService(warehouseUserA, {
+        customer: {
+          rut: "76.432.109-K",
+          legalName: "Cliente de Santiago",
+          businessActivity: "Comercio",
+        },
+        items: [
+          {
+            description: "Item",
+            quantity: 1,
+            unitPriceGross: 10000,
+          },
+        ],
+      });
+
+      if (!("request" in createRes)) throw new Error("Request creation failed");
+
+      // Warehouse B attempts to edit Warehouse A's request
+      await expect(
+        updatePendingInvoiceRequestService(warehouseUserB, createRes.request.id, {
+          customer: {
+            rut: "76.432.109-K",
+            legalName: "Intento no autorizado",
+            businessActivity: "Comercio",
+          },
+          items: [
+            {
+              description: "Item modificado",
+              quantity: 1,
+              unitPriceGross: 10000,
+            },
+          ],
+        })
+      ).rejects.toThrow(/FORBIDDEN/);
+    });
+
+    it("should prevent INVOICE_EXECUTOR and MANAGEMENT from editing PENDING requests directly", async () => {
+      const createRes = await createInvoiceRequestService(warehouseUserA, {
+        customer: {
+          rut: "76.432.109-K",
+          legalName: "Cliente SpA",
+          businessActivity: "Comercio",
+        },
+        items: [
+          {
+            description: "Item",
+            quantity: 1,
+            unitPriceGross: 10000,
+          },
+        ],
+      });
+
+      if (!("request" in createRes)) throw new Error("Request creation failed");
+
+      // INVOICE_EXECUTOR attempt
+      await expect(
+        updatePendingInvoiceRequestService(executorUser, createRes.request.id, {
+          customer: {
+            rut: "76.432.109-K",
+            legalName: "Cambio por ejecutor",
+            businessActivity: "Comercio",
+          },
+          items: [
+            {
+              description: "Item",
+              quantity: 1,
+              unitPriceGross: 10000,
+            },
+          ],
+        })
+      ).rejects.toThrow(/FORBIDDEN/);
+
+      // MANAGEMENT attempt
+      await expect(
+        updatePendingInvoiceRequestService(managementUser, createRes.request.id, {
+          customer: {
+            rut: "76.432.109-K",
+            legalName: "Cambio por gerencia",
+            businessActivity: "Comercio",
+          },
+          items: [
+            {
+              description: "Item",
+              quantity: 1,
+              unitPriceGross: 10000,
+            },
+          ],
+        })
+      ).rejects.toThrow(/FORBIDDEN/);
+    });
+
+    it("should reject modification if request status is already IN_PROGRESS (Conflict 409 / Race Condition)", async () => {
+      const createRes = await createInvoiceRequestService(warehouseUserA, {
         customer: {
           rut: "76.432.109-K",
           legalName: "Cliente SpA",
@@ -279,12 +396,12 @@ describe("Operational Improvements Integration Tests (Mejoras 1, 2, 3)", () => {
       // Claim request to transition to IN_PROGRESS
       await claimInvoiceRequestService(executorUser, createRes.request.id);
 
-      // Attempt to edit while IN_PROGRESS
+      // Requester attempts to edit while IN_PROGRESS
       await expect(
-        updatePendingInvoiceRequestService(executorUser, createRes.request.id, {
+        updatePendingInvoiceRequestService(warehouseUserA, createRes.request.id, {
           customer: {
             rut: "76.432.109-K",
-            legalName: "Intento de cambio",
+            legalName: "Intento de cambio tardío",
             businessActivity: "Comercio",
           },
           items: [
@@ -298,44 +415,8 @@ describe("Operational Improvements Integration Tests (Mejoras 1, 2, 3)", () => {
       ).rejects.toThrow(/CONFLICT_STATE/);
     });
 
-    it("should reject modification if requested by unauthorized role (WAREHOUSE_USER)", async () => {
-      const createRes = await createInvoiceRequestService(warehouseUser, {
-        customer: {
-          rut: "76.432.109-K",
-          legalName: "Cliente SpA",
-          businessActivity: "Comercio",
-        },
-        items: [
-          {
-            description: "Item",
-            quantity: 1,
-            unitPriceGross: 10000,
-          },
-        ],
-      });
-
-      if (!("request" in createRes)) throw new Error("Request creation failed");
-
-      await expect(
-        updatePendingInvoiceRequestService(warehouseUser, createRes.request.id, {
-          customer: {
-            rut: "76.432.109-K",
-            legalName: "Cambio No Permitido",
-            businessActivity: "Comercio",
-          },
-          items: [
-            {
-              description: "Item",
-              quantity: 1,
-              unitPriceGross: 10000,
-            },
-          ],
-        })
-      ).rejects.toThrow(/FORBIDDEN/);
-    });
-
     it("should reject invalid customer RUT according to algorithm modulo 11", async () => {
-      const createRes = await createInvoiceRequestService(warehouseUser, {
+      const createRes = await createInvoiceRequestService(warehouseUserA, {
         customer: {
           rut: "76.432.109-K",
           legalName: "Cliente SpA",
@@ -353,7 +434,7 @@ describe("Operational Improvements Integration Tests (Mejoras 1, 2, 3)", () => {
       if (!("request" in createRes)) throw new Error("Request creation failed");
 
       await expect(
-        updatePendingInvoiceRequestService(executorUser, createRes.request.id, {
+        updatePendingInvoiceRequestService(warehouseUserA, createRes.request.id, {
           customer: {
             rut: "11.111.111-2", // Invalid DV
             legalName: "Cliente RUT Invalido",

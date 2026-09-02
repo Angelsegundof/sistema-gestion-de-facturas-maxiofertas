@@ -11,6 +11,7 @@ import {
   RectificationReason,
 } from "@/domain/types";
 import { formatWhatsAppInvoiceMessage } from "@/domain/whatsapp";
+import EditPendingRequestModal from "@/components/EditPendingRequestModal";
 
 const REASON_OPTIONS: { value: RectificationReason; label: string }[] = [
   { value: "RUT", label: "RUT del cliente incorrecto" },
@@ -42,6 +43,7 @@ export default function ViewInvoiceRequestPage() {
   const [isLinkCopied, setIsLinkCopied] = useState(false);
   const [isMsgCopied, setIsMsgCopied] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
 
   const getOrFetchShareUrl = async (): Promise<string | null> => {
     if (!requestData?.document?.id) return null;
@@ -217,6 +219,28 @@ export default function ViewInvoiceRequestPage() {
           </Link>
           {getStatusBadge()}
         </div>
+
+        {/* PENDING State Banner with Edit action */}
+        {requestData.status === "PENDING" && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-1.5 text-amber-900 text-xs font-extrabold uppercase tracking-wider">
+                <span>⏳</span>
+                <span>Solicitud pendiente de emisión</span>
+              </div>
+              <p className="text-[11px] text-amber-800 mt-0.5">
+                Esta solicitud aún no ha sido tomada por el equipo de facturación. Puedes corregir los datos del cliente, productos o notas antes de que sea procesada.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowEditModal(true)}
+              className="self-start sm:self-auto py-2 px-3.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-xs transition shadow-2xs whitespace-nowrap shrink-0 flex items-center gap-1 cursor-pointer"
+            >
+              ✏️ Editar solicitud
+            </button>
+          </div>
+        )}
 
         {/* Active Rectification Banner */}
         {activeRect && (
@@ -525,6 +549,16 @@ export default function ViewInvoiceRequestPage() {
           </div>
         </div>
       )}
+
+      {/* Edit PENDING Request Modal (Requester) */}
+      <EditPendingRequestModal
+        request={requestData}
+        isOpen={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        onSaved={(updated) => {
+          setRequestData(updated);
+        }}
+      />
     </div>
   );
 }

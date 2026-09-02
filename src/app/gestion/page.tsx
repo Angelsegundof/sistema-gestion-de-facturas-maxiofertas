@@ -15,7 +15,6 @@ import {
   RectificationReason,
 } from "@/domain/types";
 import { WarehouseMultiSelect } from "@/components/WarehouseMultiSelect";
-import EditPendingRequestModal from "@/components/EditPendingRequestModal";
 
 const REASON_LABELS: Record<RectificationReason, string> = {
   RUT: "RUT",
@@ -51,8 +50,6 @@ export default function GestionFacturacionPage() {
   const [loadingQueue, setLoadingQueue] = useState(true);
   const [actionError, setActionError] = useState<string | null>(null);
   const [claimingId, setClaimingId] = useState<string | null>(null);
-  const [editingRequest, setEditingRequest] = useState<SanitizedInvoiceRequest | null>(null);
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -170,7 +167,7 @@ export default function GestionFacturacionPage() {
     return () => {
       isMounted = false;
     };
-  }, [currentUser, activeTab, searchTerm, selectedWarehouseIds, currentPage, refreshTrigger]);
+  }, [currentUser, activeTab, searchTerm, selectedWarehouseIds, currentPage]);
 
   const refreshQueue = async () => {
     setLoadingQueue(true);
@@ -694,23 +691,13 @@ export default function GestionFacturacionPage() {
 
                           <td className="p-3.5 text-right">
                             {activeTab === "PENDING" ? (
-                              <div className="flex items-center justify-end gap-1.5">
-                                <button
-                                  type="button"
-                                  onClick={() => setEditingRequest(r)}
-                                  className="py-1.5 px-2.5 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold border border-amber-300 rounded-lg transition text-xs shadow-2xs"
-                                  title="Editar datos de la solicitud antes de tomarla"
-                                >
-                                  ✏️ Editar
-                                </button>
-                                <button
-                                  onClick={() => handleClaimRequest(r.id)}
-                                  disabled={claimingId === r.id}
-                                  className="py-1.5 px-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition disabled:opacity-50 text-xs shadow-2xs"
-                                >
-                                  {claimingId === r.id ? "Tomando..." : "Tomar solicitud"}
-                                </button>
-                              </div>
+                              <button
+                                onClick={() => handleClaimRequest(r.id)}
+                                disabled={claimingId === r.id}
+                                className="py-1.5 px-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition disabled:opacity-50 text-xs shadow-2xs"
+                              >
+                                {claimingId === r.id ? "Tomando..." : "Tomar solicitud"}
+                              </button>
                             ) : (
                               <Link
                                 href={`/gestion/${r.id}`}
@@ -779,19 +766,6 @@ export default function GestionFacturacionPage() {
             )}
           </div>
         )}
-
-        {/* MODAL EDICIÓN SOLICITUD PENDIENTE */}
-        <EditPendingRequestModal
-          request={editingRequest}
-          isOpen={!!editingRequest}
-          onClose={() => setEditingRequest(null)}
-          onSaved={(updated) => {
-            setRequests((prev) =>
-              prev.map((item) => (item.id === updated.id ? { ...item, ...updated } : item))
-            );
-            setRefreshTrigger((prev) => prev + 1);
-          }}
-        />
       </div>
     </div>
   );
