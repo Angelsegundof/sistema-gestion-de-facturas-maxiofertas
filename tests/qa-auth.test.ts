@@ -151,7 +151,8 @@ describe("QA-001 & QA-002: QA Local Authentication & Role Isolation", () => {
     expect(passValid).toBe(true);
 
     expect(hasPermission(user.role, "STATS_VIEW")).toBe(true);
-    expect(hasPermission(user.role, "INVOICE_FINALIZE")).toBe(false);
+    expect(hasPermission(user.role, "INVOICE_FINALIZE")).toBe(true);
+    expect(hasPermission(user.role, "USER_MANAGE")).toBe(false);
   });
 
   it("5. Administrador: Autentica con éxito y recibe rol ADMIN", async () => {

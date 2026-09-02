@@ -347,6 +347,213 @@ export async function createInvoiceRequestService(
   };
 }
 
+export interface UpdatePendingInvoiceRequestInput {
+  customer: {
+    rut: string;
+    legalName: string;
+    businessActivity: string;
+    phone?: string | null;
+    email?: string | null;
+  };
+  items: Array<{
+    description: string;
+    quantity: number;
+    unitPriceGross: number;
+  }>;
+  notes?: string | null;
+}
+
+export async function updatePendingInvoiceRequestService(
+  currentUser: SanitizedUser,
+  requestId: string,
+  input: UpdatePendingInvoiceRequestInput,
+  options: {
+    ipAddress?: string;
+  } = {}
+): Promise<SanitizedInvoiceRequest> {
+  const db = getDb();
+  if (!db) {
+    throw new Error("Base de datos no disponible.");
+  }
+
+  // 1. Verificar permisos RBAC
+  if (
+    currentUser.role !== "INVOICE_EXECUTOR" &&
+    currentUser.role !== "MANAGEMENT" &&
+    currentUser.role !== "ADMIN"
+  ) {
+    throw new Error("FORBIDDEN: No tienes permisos para modificar solicitudes de facturación.");
+  }
+
+  // 2. Verificar existencia y estado PENDING
+  const existingReqList: InvoiceRequest[] = await db
+    .select()
+    .from(invoiceRequests)
+    .where(eq(invoiceRequests.id, requestId))
+    .limit(1);
+
+  if (existingReqList.length === 0) {
+    throw new Error("NOT_FOUND: La solicitud no existe.");
+  }
+
+  const targetReq = existingReqList[0];
+
+  if (targetReq.status !== "PENDING") {
+    throw new Error(
+      "CONFLICT_STATE: Esta solicitud ya comenzó a ser procesada y no puede modificarse. Actualiza la página para continuar."
+    );
+  }
+
+  // 3. Validar y normalizar RUT del cliente
+  const rawRut = input.customer.rut.trim();
+  if (!validateRut(rawRut)) {
+    throw new Error("VALIDATION_ERROR: El RUT del cliente no es válido según el algoritmo módulo 11.");
+  }
+
+  const canonicalRut = normalizeRut(rawRut);
+  const displayRut = formatRut(rawRut);
+  const normalizedEmail = input.customer.email ? input.customer.email.trim().toLowerCase() : null;
+  const normalizedPhone = input.customer.phone ? input.customer.phone.trim() : null;
+
+  // 4. Validar items y calcular precios determinísticamente
+  if (!input.items || input.items.length === 0) {
+    throw new Error("VALIDATION_ERROR: Debe incluir al menos un producto.");
+  }
+
+  for (const it of input.items) {
+    if (!it.description || !it.description.trim()) {
+      throw new Error("VALIDATION_ERROR: La descripción del producto es obligatoria.");
+    }
+    if (!Number.isInteger(it.quantity) || it.quantity <= 0) {
+      throw new Error("VALIDATION_ERROR: La cantidad debe ser un entero positivo.");
+    }
+    if (!Number.isInteger(it.unitPriceGross) || it.unitPriceGross <= 0) {
+      throw new Error("VALIDATION_ERROR: El precio unitario bruto debe ser un entero positivo.");
+    }
+  }
+
+  const calculatedTotals = calculateRequestTotals(input.items);
+
+  // 5. Buscar o crear cliente sin duplicar
+  let customerId: string;
+  const existingCustomers: Customer[] = await db
+    .select()
+    .from(customers)
+    .where(eq(customers.rutCanonical, canonicalRut))
+    .limit(1);
+
+  if (existingCustomers.length > 0) {
+    customerId = existingCustomers[0].id;
+    // Actualizar datos del cliente si se proporcionan
+    await db
+      .update(customers)
+      .set({
+        legalName: input.customer.legalName.trim(),
+        businessActivity: input.customer.businessActivity.trim(),
+        phone: normalizedPhone || existingCustomers[0].phone,
+        email: normalizedEmail || existingCustomers[0].email,
+        updatedAt: sql`NOW()`,
+      })
+      .where(eq(customers.id, customerId));
+  } else {
+    const insertedCustomers: Customer[] = await db
+      .insert(customers)
+      .values({
+        rutCanonical: canonicalRut,
+        rutDisplay: displayRut,
+        legalName: input.customer.legalName.trim(),
+        businessActivity: input.customer.businessActivity.trim(),
+        phone: normalizedPhone,
+        email: normalizedEmail,
+        active: true,
+      })
+      .onConflictDoNothing({ target: customers.rutCanonical })
+      .returning();
+
+    if (insertedCustomers.length > 0) {
+      customerId = insertedCustomers[0].id;
+    } else {
+      const fetched: Customer[] = await db
+        .select()
+        .from(customers)
+        .where(eq(customers.rutCanonical, canonicalRut))
+        .limit(1);
+      customerId = fetched[0].id;
+    }
+  }
+
+  // 6. Actualización atómica server-side (WHERE id = ? AND status = 'PENDING')
+  const updatedReqList: InvoiceRequest[] = await db
+    .update(invoiceRequests)
+    .set({
+      customerId,
+      customerRutSnapshot: displayRut,
+      customerLegalNameSnapshot: input.customer.legalName.trim(),
+      customerBusinessActivitySnapshot: input.customer.businessActivity.trim(),
+      customerPhoneSnapshot: normalizedPhone,
+      customerEmailSnapshot: normalizedEmail,
+      expectedGrossTotal: calculatedTotals.expectedGrossTotal,
+      notes: input.notes ? input.notes.trim() : null,
+      updatedAt: sql`NOW()`,
+    })
+    .where(
+      and(
+        eq(invoiceRequests.id, requestId),
+        eq(invoiceRequests.status, "PENDING")
+      )
+    )
+    .returning();
+
+  if (updatedReqList.length === 0) {
+    throw new Error(
+      "CONFLICT_STATE: Esta solicitud ya comenzó a ser procesada y no puede modificarse. Actualiza la página para continuar."
+    );
+  }
+
+  const updatedReq = updatedReqList[0];
+
+  // 7. Reemplazar líneas estructuradas de productos
+  await db
+    .delete(invoiceRequestItems)
+    .where(eq(invoiceRequestItems.invoiceRequestId, updatedReq.id));
+
+  const itemsToInsert = calculatedTotals.items.map((item) => ({
+    invoiceRequestId: updatedReq.id,
+    lineNumber: item.lineNumber,
+    description: item.description,
+    quantity: item.quantity,
+    unitPriceGross: item.unitPriceGross,
+    unitPriceNet: item.unitPriceNet,
+    lineTotalGross: item.lineTotalGross,
+    lineTotalNet: item.lineTotalNet,
+    vatRate: "19.00",
+  }));
+
+  const insertedItems = await db
+    .insert(invoiceRequestItems)
+    .values(itemsToInsert)
+    .returning();
+
+  // 8. Registro de auditoría
+  await logAuditEvent({
+    userId: currentUser.id,
+    action: "INVOICE_REQUEST_UPDATED_WHILE_PENDING",
+    entityType: "invoice_requests",
+    entityId: updatedReq.id,
+    metadata: {
+      requestNumber: updatedReq.requestNumber,
+      previousGrossTotal: targetReq.expectedGrossTotal,
+      newGrossTotal: updatedReq.expectedGrossTotal,
+      previousCustomerRut: targetReq.customerRutSnapshot,
+      newCustomerRut: displayRut,
+      itemsCount: insertedItems.length,
+    },
+    ipAddress: options.ipAddress,
+  });
+
+  return sanitizeInvoiceRequest(updatedReq, insertedItems);
+}
+
 export function sanitizeInvoiceRequest(
   r: InvoiceRequest,
   items?: InvoiceRequestItem[]

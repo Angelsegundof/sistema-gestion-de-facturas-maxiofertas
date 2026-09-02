@@ -267,7 +267,7 @@ export async function claimInvoiceRequestService(
     throw new Error("Base de datos no disponible.");
   }
 
-  if (currentUser.role !== "INVOICE_EXECUTOR" && currentUser.role !== "ADMIN") {
+  if (currentUser.role !== "INVOICE_EXECUTOR" && currentUser.role !== "ADMIN" && currentUser.role !== "MANAGEMENT") {
     throw new Error("FORBIDDEN: No tienes permisos para tomar solicitudes de facturación.");
   }
 
@@ -356,7 +356,7 @@ export async function requestCorrectionService(
     throw new Error("Base de datos no disponible.");
   }
 
-  if (currentUser.role !== "INVOICE_EXECUTOR" && currentUser.role !== "ADMIN") {
+  if (currentUser.role !== "INVOICE_EXECUTOR" && currentUser.role !== "ADMIN" && currentUser.role !== "MANAGEMENT") {
     throw new Error("FORBIDDEN: No tienes permisos para observar solicitudes.");
   }
 
@@ -376,8 +376,8 @@ export async function requestCorrectionService(
     throw new Error("INVALID_STATE: Solo una solicitud en proceso puede ser enviada a corrección.");
   }
 
-  // IDOR Protection: Executor can only observe requests assigned to themselves (unless ADMIN)
-  if (currentUser.role === "INVOICE_EXECUTOR" && targetReq.assignedTo !== currentUser.id) {
+  // IDOR Protection: Executor/Management can only observe requests assigned to themselves (unless ADMIN)
+  if (currentUser.role !== "ADMIN" && targetReq.assignedTo !== currentUser.id) {
     throw new Error("FORBIDDEN: No puedes observar una solicitud asignada a otro ejecutor.");
   }
 
@@ -632,7 +632,7 @@ export async function reconcileInvoiceRequestService(
     throw new Error("Base de datos no disponible.");
   }
 
-  if (currentUser.role !== "INVOICE_EXECUTOR" && currentUser.role !== "ADMIN") {
+  if (currentUser.role !== "INVOICE_EXECUTOR" && currentUser.role !== "ADMIN" && currentUser.role !== "MANAGEMENT") {
     throw new Error("FORBIDDEN: No tienes permisos para conciliar montos del SII.");
   }
 
@@ -656,8 +656,8 @@ export async function reconcileInvoiceRequestService(
     throw new Error("INVALID_STATE: Solo una solicitud en proceso puede ser conciliada con el SII.");
   }
 
-  // IDOR / Ownership Protection: Executor can only reconcile requests assigned to themselves (unless ADMIN)
-  if (currentUser.role === "INVOICE_EXECUTOR" && targetReq.assignedTo !== currentUser.id) {
+  // IDOR / Ownership Protection: Executor/Management can only reconcile requests assigned to themselves (unless ADMIN)
+  if (currentUser.role !== "ADMIN" && targetReq.assignedTo !== currentUser.id) {
     throw new Error("FORBIDDEN: No puedes conciliar una solicitud asignada a otro ejecutor.");
   }
 

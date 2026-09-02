@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/auth";
 import { verifyCsrfOrigin } from "@/lib/auth/csrf";
 import { uploadReplacementInvoiceService } from "@/lib/services/rectifications";
@@ -32,7 +32,7 @@ export async function POST(
     );
   }
 
-  if (currentUser.role !== "INVOICE_EXECUTOR" && currentUser.role !== "ADMIN") {
+  if (currentUser.role !== "INVOICE_EXECUTOR" && currentUser.role !== "ADMIN" && currentUser.role !== "MANAGEMENT") {
     return NextResponse.json<ApiResponse<null>>(
       { success: false, error: { code: "FORBIDDEN", message: "No tienes permisos para cargar nuevas facturas." } },
       { status: 403 }

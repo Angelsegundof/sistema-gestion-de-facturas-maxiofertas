@@ -1,4 +1,4 @@
-import { eq, and, sql, gte, lte, asc, desc, isNull } from "drizzle-orm";
+import { eq, and, or, sql, gte, lte, asc, desc, isNull, inArray } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import {
   invoiceRequests,
@@ -610,7 +610,21 @@ export async function getExecutorStatisticsService(
     endDate: periodEnd.toISOString(),
   };
 
-  // Get all active executors (users with role INVOICE_EXECUTOR, or any user who has completed invoices)
+  // Get all active executors (users with role INVOICE_EXECUTOR or who have completed invoices)
+  const completedExecutorsRes = await db
+    .selectDistinct({ assignedTo: invoiceRequests.assignedTo })
+    .from(invoiceRequests)
+    .where(eq(invoiceRequests.status, "COMPLETED"));
+
+  const completedUserIds = completedExecutorsRes
+    .map((r) => r.assignedTo)
+    .filter((id): id is string => Boolean(id));
+
+  const executorConditions = [eq(users.role, "INVOICE_EXECUTOR")];
+  if (completedUserIds.length > 0) {
+    executorConditions.push(inArray(users.id, completedUserIds));
+  }
+
   const allExecutors = await db
     .select({
       id: users.id,
@@ -619,7 +633,7 @@ export async function getExecutorStatisticsService(
       role: users.role,
     })
     .from(users)
-    .where(eq(users.role, "INVOICE_EXECUTOR"))
+    .where(or(...executorConditions))
     .orderBy(asc(users.name));
 
   const executorList: ExecutorPerformanceItem[] = [];

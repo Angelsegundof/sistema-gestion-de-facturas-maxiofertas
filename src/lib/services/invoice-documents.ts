@@ -108,7 +108,7 @@ export async function uploadInvoiceDocumentService(
     throw new Error("Base de datos no disponible.");
   }
 
-  if (currentUser.role !== "INVOICE_EXECUTOR" && currentUser.role !== "ADMIN") {
+  if (currentUser.role !== "INVOICE_EXECUTOR" && currentUser.role !== "ADMIN" && currentUser.role !== "MANAGEMENT") {
     throw new Error("FORBIDDEN: No tienes permisos para cargar documentos de factura.");
   }
 
@@ -132,8 +132,8 @@ export async function uploadInvoiceDocumentService(
     throw new Error("INVALID_STATE: Solo se pueden cargar documentos a solicitudes en proceso.");
   }
 
-  // IDOR / Ownership Check: Executor must be assigned
-  if (currentUser.role === "INVOICE_EXECUTOR" && targetReq.assignedTo !== currentUser.id) {
+  // IDOR / Ownership Check: Executor or Management must be assigned
+  if (currentUser.role !== "ADMIN" && targetReq.assignedTo !== currentUser.id) {
     throw new Error("FORBIDDEN: No puedes cargar documentos a una solicitud asignada a otro ejecutor.");
   }
 
@@ -259,7 +259,7 @@ export async function completeInvoiceRequestService(
     throw new Error("Base de datos no disponible.");
   }
 
-  if (currentUser.role !== "INVOICE_EXECUTOR" && currentUser.role !== "ADMIN") {
+  if (currentUser.role !== "INVOICE_EXECUTOR" && currentUser.role !== "ADMIN" && currentUser.role !== "MANAGEMENT") {
     throw new Error("FORBIDDEN: No tienes permisos para finalizar facturas.");
   }
 
@@ -306,7 +306,7 @@ export async function completeInvoiceRequestService(
   }
 
   // IDOR / Ownership Check
-  if (currentUser.role === "INVOICE_EXECUTOR" && targetReq.assignedTo !== currentUser.id) {
+  if (currentUser.role !== "ADMIN" && targetReq.assignedTo !== currentUser.id) {
     throw new Error("FORBIDDEN: No puedes finalizar una solicitud asignada a otro ejecutor.");
   }
 

@@ -27,16 +27,18 @@ describe("Matriz de Roles y Permisos v1.0 & Default Deny", () => {
     expect(hasPermission("INVOICE_EXECUTOR", "WAREHOUSE_MANAGE")).toBe(false);
   });
 
-  it("should allow MANAGEMENT only read/consultative permissions", () => {
+  it("should allow MANAGEMENT supervision, statistics, and invoicing execution operations", () => {
     expect(hasPermission("MANAGEMENT", "REQUEST_VIEW_ALL")).toBe(true);
     expect(hasPermission("MANAGEMENT", "INVOICE_VIEW")).toBe(true);
     expect(hasPermission("MANAGEMENT", "STATS_VIEW")).toBe(true);
     expect(hasPermission("MANAGEMENT", "AUDIT_VIEW")).toBe(true);
+    expect(hasPermission("MANAGEMENT", "REQUEST_CLAIM")).toBe(true);
+    expect(hasPermission("MANAGEMENT", "INVOICE_FINALIZE")).toBe(true);
+    expect(hasPermission("MANAGEMENT", "REQUEST_EDIT_PENDING")).toBe(true);
 
-    // Forbidden for MANAGEMENT (No operational writes)
-    expect(hasPermission("MANAGEMENT", "REQUEST_CLAIM")).toBe(false);
-    expect(hasPermission("MANAGEMENT", "INVOICE_FINALIZE")).toBe(false);
+    // Forbidden for MANAGEMENT (Administrative config is reserved for ADMIN)
     expect(hasPermission("MANAGEMENT", "USER_MANAGE")).toBe(false);
+    expect(hasPermission("MANAGEMENT", "WAREHOUSE_MANAGE")).toBe(false);
   });
 
   it("should allow ADMIN comprehensive management and operational permissions", () => {

@@ -10,6 +10,7 @@ import {
   SanitizedUser,
   SanitizedDocument,
 } from "@/domain/types";
+import EditPendingRequestModal from "@/components/EditPendingRequestModal";
 
 const REASON_LABELS: Record<RequestCorrectionReason, string> = {
   INVALID_RUT: "RUT incorrecto / no válido",
@@ -61,6 +62,8 @@ export default function WorktablePage() {
   const [observationComment, setObservationComment] = useState("");
   const [submittingObservation, setSubmittingObservation] = useState(false);
   const [observationError, setObservationError] = useState<string | null>(null);
+  // Edit PENDING Modal state
+  const [showEditModal, setShowEditModal] = useState(false);
 
   useEffect(() => {
     async function loadData() {
@@ -319,16 +322,27 @@ ${itemsText}`;
             ← Volver a pendientes
           </Link>
           <div className="flex items-center gap-2">
+            {requestData.status === "PENDING" && (
+              <button
+                type="button"
+                onClick={() => setShowEditModal(true)}
+                className="py-1 px-3 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-lg transition shadow-2xs flex items-center gap-1"
+              >
+                ✏️ Editar Solicitud
+              </button>
+            )}
             <span
               className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${
                 isCompleted
                   ? "bg-emerald-100 text-emerald-800"
                   : requestData.status === "IN_PROGRESS"
                   ? "bg-blue-100 text-blue-800"
+                  : requestData.status === "PENDING"
+                  ? "bg-amber-100 text-amber-800"
                   : "bg-slate-100 text-slate-800"
               }`}
             >
-              {isCompleted ? "Factura lista" : requestData.status === "IN_PROGRESS" ? "En proceso" : requestData.status}
+              {isCompleted ? "Factura lista" : requestData.status === "IN_PROGRESS" ? "En proceso" : requestData.status === "PENDING" ? "Pendiente" : requestData.status}
             </span>
             {!isCompleted && (
               <span className="text-xs text-slate-500">
@@ -912,6 +926,16 @@ ${itemsText}`;
             </div>
           </div>
         )}
+
+        {/* Edit PENDING Request Modal */}
+        <EditPendingRequestModal
+          request={requestData}
+          isOpen={showEditModal}
+          onClose={() => setShowEditModal(false)}
+          onSaved={(updated) => {
+            setRequestData(updated);
+          }}
+        />
       </div>
     </div>
   );

@@ -454,7 +454,7 @@ export async function claimRectificationService(
     throw new Error("Base de datos no disponible.");
   }
 
-  if (currentUser.role !== "INVOICE_EXECUTOR" && currentUser.role !== "ADMIN") {
+  if (currentUser.role !== "INVOICE_EXECUTOR" && currentUser.role !== "ADMIN" && currentUser.role !== "MANAGEMENT") {
     throw new Error("FORBIDDEN: No tienes permisos para tomar rectificaciones.");
   }
 
@@ -503,6 +503,7 @@ export async function claimRectificationService(
 
   const claimed = updatedList[0];
 
+  // Audit log
   await logAuditEvent({
     userId: currentUser.id,
     action: "RECTIFICATION_ASSIGNED",
@@ -537,7 +538,7 @@ export async function registerCreditNoteService(
     throw new Error("Base de datos no disponible.");
   }
 
-  if (currentUser.role !== "INVOICE_EXECUTOR" && currentUser.role !== "ADMIN") {
+  if (currentUser.role !== "INVOICE_EXECUTOR" && currentUser.role !== "ADMIN" && currentUser.role !== "MANAGEMENT") {
     throw new Error("FORBIDDEN: No tienes permisos para registrar Notas de Crédito.");
   }
 
@@ -551,7 +552,7 @@ export async function registerCreditNoteService(
     throw new Error("NOT_FOUND: La rectificación no existe.");
   }
 
-  if (currentUser.role === "INVOICE_EXECUTOR" && rect.assignedTo !== currentUser.id) {
+  if (currentUser.role !== "ADMIN" && rect.assignedTo !== currentUser.id) {
     throw new Error("FORBIDDEN: No puedes registrar la Nota de Crédito en una rectificación asignada a otro ejecutor.");
   }
 
@@ -702,7 +703,7 @@ export async function uploadReplacementInvoiceService(
     throw new Error("Base de datos no disponible.");
   }
 
-  if (currentUser.role !== "INVOICE_EXECUTOR" && currentUser.role !== "ADMIN") {
+  if (currentUser.role !== "INVOICE_EXECUTOR" && currentUser.role !== "ADMIN" && currentUser.role !== "MANAGEMENT") {
     throw new Error("FORBIDDEN: No tienes permisos para cargar nuevas facturas.");
   }
 
@@ -716,7 +717,7 @@ export async function uploadReplacementInvoiceService(
     throw new Error("NOT_FOUND: La rectificación no existe.");
   }
 
-  if (currentUser.role === "INVOICE_EXECUTOR" && rect.assignedTo !== currentUser.id) {
+  if (currentUser.role !== "ADMIN" && rect.assignedTo !== currentUser.id) {
     throw new Error("FORBIDDEN: No puedes cargar la nueva factura en una rectificación asignada a otro ejecutor.");
   }
 
@@ -853,7 +854,7 @@ export async function completeRectificationService(
     throw new Error("Base de datos no disponible.");
   }
 
-  if (currentUser.role !== "INVOICE_EXECUTOR" && currentUser.role !== "ADMIN") {
+  if (currentUser.role !== "INVOICE_EXECUTOR" && currentUser.role !== "ADMIN" && currentUser.role !== "MANAGEMENT") {
     throw new Error("FORBIDDEN: No tienes permisos para finalizar rectificaciones.");
   }
 
@@ -872,7 +873,7 @@ export async function completeRectificationService(
     return sanitizeRectification(rect, undefined, currentUser.name);
   }
 
-  if (currentUser.role === "INVOICE_EXECUTOR" && rect.assignedTo !== currentUser.id) {
+  if (currentUser.role !== "ADMIN" && rect.assignedTo !== currentUser.id) {
     throw new Error("FORBIDDEN: No puedes finalizar una rectificación asignada a otro ejecutor.");
   }
 

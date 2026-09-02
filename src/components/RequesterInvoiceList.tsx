@@ -11,6 +11,9 @@ export default function RequesterInvoiceList() {
   const [error, setError] = useState<string | null>(null);
   const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
   const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
+  const [copiedPhone, setCopiedPhone] = useState(false);
+  const [copiedEmail, setCopiedEmail] = useState(false);
+  const [contactModalReq, setContactModalReq] = useState<SanitizedInvoiceRequest | null>(null);
   const [sharingId, setSharingId] = useState<string | null>(null);
   const [refreshIndex, setRefreshIndex] = useState(0);
 
@@ -248,7 +251,20 @@ export default function RequesterInvoiceList() {
 
                     {/* Acción */}
                     <td className="py-3.5 px-4 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
+                      <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setContactModalReq(req);
+                            setCopiedPhone(false);
+                            setCopiedEmail(false);
+                          }}
+                          className="py-1.5 px-2.5 bg-slate-50 hover:bg-slate-100 text-slate-700 font-semibold border border-slate-200 rounded-lg transition text-[11px]"
+                          title="Ver datos de contacto del cliente"
+                        >
+                          👤 Datos cliente
+                        </button>
+
                         {statusInfo.actionType === "NEEDS_CORRECTION" ? (
                           <Link
                             href={`/requests/${req.id}/corregir`}
@@ -351,6 +367,153 @@ export default function RequesterInvoiceList() {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* MODAL DATOS DE CONTACTO DEL CLIENTE */}
+      {contactModalReq && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-md w-full p-6 space-y-5 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-start justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center font-bold text-lg">
+                  👤
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Datos de Contacto del Cliente</h3>
+                  <p className="text-[11px] text-slate-500 font-mono">{contactModalReq.requestNumber}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setContactModalReq(null)}
+                className="text-slate-400 hover:text-slate-600 text-base font-bold p-1 rounded-lg hover:bg-slate-100 transition"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3.5 text-xs">
+              <div>
+                <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">
+                  Razón Social
+                </label>
+                <div className="font-bold text-slate-900 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                  {contactModalReq.customerLegalNameSnapshot || "No registrado"}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">
+                  RUT del Cliente
+                </label>
+                <div className="font-mono font-bold text-slate-800 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                  {contactModalReq.customerRutSnapshot || "No registrado"}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">
+                  Teléfono de Contacto
+                </label>
+                <div className="flex items-center justify-between gap-2 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                  <span
+                    className={`font-semibold ${
+                      contactModalReq.customerPhoneSnapshot?.trim()
+                        ? "text-slate-900 font-mono"
+                        : "text-slate-400 italic"
+                    }`}
+                  >
+                    {contactModalReq.customerPhoneSnapshot?.trim() || "No registrado"}
+                  </span>
+                  {contactModalReq.customerPhoneSnapshot?.trim() && (
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const phone = contactModalReq.customerPhoneSnapshot?.trim() || "";
+                          await navigator.clipboard.writeText(phone);
+                          setCopiedPhone(true);
+                          setTimeout(() => setCopiedPhone(false), 2500);
+                        }}
+                        className="px-2 py-1 bg-white hover:bg-slate-100 text-slate-700 font-bold border border-slate-300 rounded text-[11px] transition shadow-2xs"
+                      >
+                        {copiedPhone ? "✓ Copiado" : "Copiar"}
+                      </button>
+
+                      {contactModalReq.document && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const rawPhone = contactModalReq.customerPhoneSnapshot?.trim() || "";
+                            const cleanDigits = rawPhone.replace(/\D/g, "");
+                            const fullPhone = cleanDigits.startsWith("56")
+                              ? cleanDigits
+                              : `56${cleanDigits.replace(/^0+/, "")}`;
+                            const shareUrl = await getOrFetchShareUrl(contactModalReq.document!.id);
+                            if (shareUrl) {
+                              const msg = formatWhatsAppInvoiceMessage(
+                                contactModalReq.customerLegalNameSnapshot,
+                                shareUrl
+                              );
+                              window.open(
+                                `https://wa.me/${fullPhone}?text=${encodeURIComponent(msg)}`,
+                                "_blank"
+                              );
+                            }
+                          }}
+                          className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded text-[11px] transition shadow-2xs"
+                        >
+                          💬 WhatsApp
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">
+                  Correo Electrónico
+                </label>
+                <div className="flex items-center justify-between gap-2 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                  <span
+                    className={`font-semibold ${
+                      contactModalReq.customerEmailSnapshot?.trim()
+                        ? "text-slate-900"
+                        : "text-slate-400 italic"
+                    }`}
+                  >
+                    {contactModalReq.customerEmailSnapshot?.trim() || "No registrado"}
+                  </span>
+                  {contactModalReq.customerEmailSnapshot?.trim() && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const email = contactModalReq.customerEmailSnapshot?.trim() || "";
+                        await navigator.clipboard.writeText(email);
+                        setCopiedEmail(true);
+                        setTimeout(() => setCopiedEmail(false), 2500);
+                      }}
+                      className="px-2 py-1 bg-white hover:bg-slate-100 text-slate-700 font-bold border border-slate-300 rounded text-[11px] transition shadow-2xs"
+                    >
+                      {copiedEmail ? "✓ Copiado" : "Copiar"}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setContactModalReq(null)}
+                className="py-1.5 px-4 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl transition text-xs shadow-xs"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </section>

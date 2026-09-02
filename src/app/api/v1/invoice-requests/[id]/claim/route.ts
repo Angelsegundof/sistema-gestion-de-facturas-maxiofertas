@@ -32,7 +32,7 @@ export async function POST(
     );
   }
 
-  if (currentUser.role !== "INVOICE_EXECUTOR" && currentUser.role !== "ADMIN") {
+  if (currentUser.role !== "INVOICE_EXECUTOR" && currentUser.role !== "ADMIN" && currentUser.role !== "MANAGEMENT") {
     return NextResponse.json<ApiResponse<null>>(
       { success: false, error: { code: "FORBIDDEN", message: "No tienes permisos para tomar solicitudes de facturación." } },
       { status: 403 }

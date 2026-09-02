@@ -11,11 +11,14 @@ import {
   users,
 } from "@/lib/db/schema";
 import { requireAuth, AuthError } from "@/lib/auth";
+import { verifyCsrfOrigin } from "@/lib/auth/csrf";
 import { sanitizeQueueInvoiceRequest } from "@/lib/services/invoice-queue";
 import { sanitizeDocument } from "@/lib/services/invoice-documents";
 import { sanitizeRectification } from "@/lib/services/rectifications";
+import { updatePendingInvoiceRequestService } from "@/lib/services/invoice-requests";
 import { r2Client } from "@/lib/r2/client";
 import { ApiResponse, SanitizedInvoiceRequest } from "@/types";
+import { z } from "zod";
 
 export async function GET(
   request: NextRequest,
@@ -193,4 +196,153 @@ export async function GET(
     },
     { status: 200 }
   );
+}
+
+const editPendingRequestSchema = z.object({
+  customer: z.object({
+    rut: z.string().min(1, "El RUT del cliente es obligatorio"),
+    legalName: z.string().min(2, "La razón social debe tener al menos 2 caracteres").max(200),
+    businessActivity: z.string().min(2, "El giro comercial debe tener al menos 2 caracteres").max(200),
+    phone: z.string().nullable().optional(),
+    email: z.string().email("Correo electrónico inválido").nullable().optional().or(z.literal("")),
+  }),
+  items: z
+    .array(
+      z.object({
+        description: z.string().min(1, "La descripción del producto es obligatoria"),
+        quantity: z.number().int().positive("La cantidad debe ser mayor a 0"),
+        unitPriceGross: z.number().int().positive("El precio unitario debe ser mayor a 0"),
+      })
+    )
+    .min(1, "Debe incluir al menos un producto"),
+  notes: z.string().nullable().optional(),
+});
+
+export async function PATCH(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  let currentUser;
+  try {
+    currentUser = await requireAuth();
+  } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json<ApiResponse<null>>(
+        { success: false, error: { code: error.code, message: error.message } },
+        { status: error.statusCode }
+      );
+    }
+    return NextResponse.json<ApiResponse<null>>(
+      { success: false, error: { code: "UNAUTHORIZED", message: "Acceso no autorizado" } },
+      { status: 401 }
+    );
+  }
+
+  const csrfCheck = verifyCsrfOrigin(request);
+  if (!csrfCheck.valid) {
+    return NextResponse.json<ApiResponse<null>>(
+      {
+        success: false,
+        error: { code: "CSRF_ERROR", message: csrfCheck.reason || "Error de validación CSRF" },
+      },
+      { status: 403 }
+    );
+  }
+
+  if (
+    currentUser.role !== "INVOICE_EXECUTOR" &&
+    currentUser.role !== "MANAGEMENT" &&
+    currentUser.role !== "ADMIN"
+  ) {
+    return NextResponse.json<ApiResponse<null>>(
+      {
+        success: false,
+        error: { code: "FORBIDDEN", message: "No tienes permisos para modificar solicitudes de facturación." },
+      },
+      { status: 403 }
+    );
+  }
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json<ApiResponse<null>>(
+      { success: false, error: { code: "INVALID_JSON", message: "El cuerpo de la solicitud no es un JSON válido." } },
+      { status: 400 }
+    );
+  }
+
+  const validation = editPendingRequestSchema.safeParse(body);
+  if (!validation.success) {
+    const firstError = validation.error.issues[0]?.message || "Datos de solicitud inválidos.";
+    return NextResponse.json<ApiResponse<null>>(
+      { success: false, error: { code: "VALIDATION_ERROR", message: firstError } },
+      { status: 400 }
+    );
+  }
+
+  const { id } = await context.params;
+  const ipAddress = request.headers.get("x-forwarded-for") || undefined;
+
+  try {
+    const updatedRequest = await updatePendingInvoiceRequestService(
+      currentUser,
+      id,
+      validation.data,
+      { ipAddress }
+    );
+
+    return NextResponse.json<ApiResponse<{ request: SanitizedInvoiceRequest }>>(
+      {
+        success: true,
+        data: {
+          request: updatedRequest,
+        },
+      },
+      { status: 200 }
+    );
+  } catch (error: unknown) {
+    const err = error as Error;
+    const msg = err.message || "Error al actualizar la solicitud.";
+
+    if (msg.includes("CONFLICT_STATE")) {
+      return NextResponse.json<ApiResponse<null>>(
+        {
+          success: false,
+          error: {
+            code: "CONFLICT_STATE",
+            message: "Esta solicitud ya comenzó a ser procesada y no puede modificarse. Actualiza la página para continuar.",
+          },
+        },
+        { status: 409 }
+      );
+    }
+
+    if (msg.includes("NOT_FOUND")) {
+      return NextResponse.json<ApiResponse<null>>(
+        { success: false, error: { code: "NOT_FOUND", message: "La solicitud no existe." } },
+        { status: 404 }
+      );
+    }
+
+    if (msg.includes("FORBIDDEN")) {
+      return NextResponse.json<ApiResponse<null>>(
+        { success: false, error: { code: "FORBIDDEN", message: "No tienes permisos para realizar esta acción." } },
+        { status: 403 }
+      );
+    }
+
+    if (msg.includes("VALIDATION_ERROR")) {
+      return NextResponse.json<ApiResponse<null>>(
+        { success: false, error: { code: "VALIDATION_ERROR", message: msg.replace("VALIDATION_ERROR: ", "") } },
+        { status: 400 }
+      );
+    }
+
+    return NextResponse.json<ApiResponse<null>>(
+      { success: false, error: { code: "INTERNAL_ERROR", message: "Error interno al actualizar la solicitud." } },
+      { status: 500 }
+    );
+  }
 }
