@@ -5,6 +5,7 @@ import {
   verifyCsrfOrigin,
   AuthError,
 } from "@/lib/auth";
+import { ensureDbReady } from "@/lib/db";
 import {
   createInvoiceRequestService,
 } from "@/lib/services/invoice-requests";
@@ -76,6 +77,8 @@ export async function POST(request: NextRequest) {
       { status: 403 }
     );
   }
+
+  await ensureDbReady();
 
   const ipAddress = request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "unknown";
   const idempotencyKey = request.headers.get("idempotency-key") || request.headers.get("x-idempotency-key");
@@ -178,6 +181,8 @@ export async function GET(request: NextRequest) {
       { status: 403 }
     );
   }
+
+  await ensureDbReady();
 
   const { searchParams } = new URL(request.url);
   const statusParam = searchParams.get("status") as InvoiceRequestStatus | null;

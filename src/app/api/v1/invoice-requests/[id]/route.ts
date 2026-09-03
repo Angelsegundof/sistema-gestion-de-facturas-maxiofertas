@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq, and, desc, asc } from "drizzle-orm";
-import { getDb } from "@/lib/db";
+import { getDb, ensureDbReady } from "@/lib/db";
 import {
   invoiceRequests,
   invoiceRequestItems,
@@ -41,6 +41,7 @@ export async function GET(
     );
   }
 
+  await ensureDbReady();
   const { id } = await context.params;
   const db = getDb();
   if (!db) {

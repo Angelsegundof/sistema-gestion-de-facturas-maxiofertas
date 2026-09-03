@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq, desc, and, inArray } from "drizzle-orm";
-import { getDb } from "@/lib/db";
+import { getDb, ensureDbReady } from "@/lib/db";
 import {
   invoiceRequests,
   invoiceRequestStatuses,
@@ -33,6 +33,7 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  await ensureDbReady();
   const { searchParams } = new URL(request.url);
   const statusParam = searchParams.get("status") as InvoiceRequestStatus | null;
   const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));

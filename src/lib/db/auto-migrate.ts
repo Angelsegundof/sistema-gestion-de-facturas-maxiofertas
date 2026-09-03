@@ -241,27 +241,29 @@ export async function ensureNeonSchema(dbUrl: string): Promise<void> {
 
     const tableExists = res && res[0] && res[0].exists === true;
 
-    if (!tableExists) {
-      console.log("[NEON AUTO-INIT] Tablas no encontradas en Neon. Creando esquema...");
-      for (const migrationChunk of ALL_MIGRATIONS) {
-        const statements = migrationChunk
-          .split("--> statement-breakpoint")
-          .map((s) => s.trim())
-          .filter((s) => s.length > 0);
+    // Run all migration chunks (all contain IF NOT EXISTS statements)
+    for (const migrationChunk of ALL_MIGRATIONS) {
+      const statements = migrationChunk
+        .split("--> statement-breakpoint")
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
 
-        for (const stmt of statements) {
-          try {
-            await sqlClient(stmt);
-          } catch (e: any) {
-            // Safe ignore if constraint or sequence already exists
-            if (!e.message?.includes("already exists")) {
-              console.warn("[MIGRATION WARNING]:", e.message);
-            }
+      for (const stmt of statements) {
+        try {
+          await sqlClient(stmt);
+        } catch (e: any) {
+          if (
+            !e.message?.includes("already exists") &&
+            !e.message?.includes("duplicate column")
+          ) {
+            console.warn("[MIGRATION WARNING]:", e.message);
           }
         }
       }
+    }
 
-      console.log("[NEON AUTO-INIT] Esquema creado. Provisionando 20 usuarios y 16 bodegas...");
+    if (!tableExists) {
+      console.log("[NEON AUTO-INIT] Tablas no encontradas en Neon. Provisionando 20 usuarios y 16 bodegas...");
       await importRealUsersService(db);
       console.log("[NEON AUTO-INIT] Inicialización completa.");
     }
