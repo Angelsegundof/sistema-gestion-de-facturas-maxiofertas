@@ -16,6 +16,7 @@ import { sanitizeQueueInvoiceRequest } from "@/lib/services/invoice-queue";
 import { sanitizeDocument } from "@/lib/services/invoice-documents";
 import { sanitizeRectification } from "@/lib/services/rectifications";
 import { updatePendingInvoiceRequestService } from "@/lib/services/invoice-requests";
+import { hasPermission } from "@/domain/permissions";
 import { r2Client } from "@/lib/r2/client";
 import { ApiResponse, SanitizedInvoiceRequest } from "@/types";
 import { z } from "zod";
@@ -249,11 +250,7 @@ export async function PATCH(
     );
   }
 
-  if (
-    currentUser.role !== "INVOICE_EXECUTOR" &&
-    currentUser.role !== "MANAGEMENT" &&
-    currentUser.role !== "ADMIN"
-  ) {
+  if (!hasPermission(currentUser.role, "REQUEST_EDIT_PENDING")) {
     return NextResponse.json<ApiResponse<null>>(
       {
         success: false,
