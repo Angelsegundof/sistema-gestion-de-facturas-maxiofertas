@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { SanitizedInvoiceRequest } from "@/domain/types";
 import { formatWhatsAppInvoiceMessage } from "@/domain/whatsapp";
+import { formatCLP } from "@/domain/pricing";
 import EditPendingRequestModal from "@/components/EditPendingRequestModal";
 
 type RequesterStatusTab = "ALL" | "PENDING" | "NEEDS_CORRECTION" | "IN_PROGRESS" | "COMPLETED";
@@ -14,9 +15,11 @@ export default function RequesterInvoiceList() {
   const [error, setError] = useState<string | null>(null);
   const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
   const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
+  const [copiedDocLinkId, setCopiedDocLinkId] = useState<string | null>(null);
   const [copiedPhone, setCopiedPhone] = useState(false);
   const [copiedEmail, setCopiedEmail] = useState(false);
   const [contactModalReq, setContactModalReq] = useState<SanitizedInvoiceRequest | null>(null);
+  const [docsModalReq, setDocsModalReq] = useState<SanitizedInvoiceRequest | null>(null);
   const [editingRequest, setEditingRequest] = useState<SanitizedInvoiceRequest | null>(null);
   const [sharingId, setSharingId] = useState<string | null>(null);
   const [refreshIndex, setRefreshIndex] = useState(0);
@@ -83,17 +86,29 @@ export default function RequesterInvoiceList() {
   const handleCopyMessage = async (
     requestId: string,
     customerName: string,
-    documentId?: string
+    documentId?: string,
+    allDocs?: { id: string; documentNumber?: number }[]
   ) => {
-    if (!documentId) return;
     setSharingId(requestId);
     try {
-      const shareUrl = await getOrFetchShareUrl(documentId);
-      if (shareUrl) {
-        const msg = formatWhatsAppInvoiceMessage(customerName, shareUrl);
+      if (allDocs && allDocs.length > 1) {
+        const shareUrlsPromises = allDocs.map(async (d, index) => {
+          const url = await getOrFetchShareUrl(d.id);
+          return { documentNumber: d.documentNumber || index + 1, url: url || "" };
+        });
+        const shareUrls = await Promise.all(shareUrlsPromises);
+        const msg = formatWhatsAppInvoiceMessage(customerName, shareUrls);
         await navigator.clipboard.writeText(msg);
         setCopiedMsgId(requestId);
         setTimeout(() => setCopiedMsgId(null), 3000);
+      } else if (documentId) {
+        const shareUrl = await getOrFetchShareUrl(documentId);
+        if (shareUrl) {
+          const msg = formatWhatsAppInvoiceMessage(customerName, shareUrl);
+          await navigator.clipboard.writeText(msg);
+          setCopiedMsgId(requestId);
+          setTimeout(() => setCopiedMsgId(null), 3000);
+        }
       }
     } catch (err) {
       console.error("Error al copiar mensaje WhatsApp:", err);
@@ -152,12 +167,14 @@ export default function RequesterInvoiceList() {
           bg: "bg-rose-100 text-rose-800 border-rose-200",
           actionType: "NEEDS_CORRECTION",
         };
-      case "COMPLETED":
+      case "COMPLETED": {
+        const docCount = req.documents?.length || (req.document ? 1 : 0);
         return {
-          label: "Factura lista",
+          label: docCount > 1 ? `Factura lista (${docCount} docs)` : "Factura lista",
           bg: "bg-emerald-100 text-emerald-800 border-emerald-200",
           actionType: "COMPLETED",
         };
+      }
       default:
         return {
           label: req.status,
@@ -476,26 +493,50 @@ export default function RequesterInvoiceList() {
                           </Link>
                         ) : statusInfo.actionType === "COMPLETED" ? (
                           <>
-                            {req.document ? (
-                              <a
-                                href={`/api/v1/documents/${req.document.id}/access?stream=true`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="py-1.5 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg transition text-[11px]"
-                              >
-                                Ver factura
-                              </a>
-                            ) : (
-                              <Link
-                                href={`/requests/${req.id}`}
-                                className="py-1.5 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg transition text-[11px]"
-                              >
-                                Ver
-                              </Link>
-                            )}
-
-                            {req.document && (
+                            {req.documents && req.documents.length > 1 ? (
                               <>
+                                <button
+                                  type="button"
+                                  onClick={() => setDocsModalReq(req)}
+                                  className="py-1.5 px-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 font-bold border border-indigo-200 rounded-lg transition text-[11px] flex items-center gap-1 shadow-xs"
+                                  title="Ver y descargar los documentos tributarios de esta factura"
+                                >
+                                  <span>📄</span>
+                                  <span>{req.documents.length} facturas</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleCopyMessage(
+                                      req.id,
+                                      req.customerLegalNameSnapshot,
+                                      undefined,
+                                      req.documents
+                                    )
+                                  }
+                                  disabled={isSharing}
+                                  className={`py-1.5 px-2.5 font-bold rounded-lg transition text-[11px] shadow-xs ${
+                                    isMsgCopied
+                                      ? "bg-emerald-600 text-white"
+                                      : "bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300"
+                                  }`}
+                                  title="Copiar mensaje consolidado para WhatsApp con todos los enlaces"
+                                >
+                                  {isMsgCopied ? "✓ Copiado" : isSharing ? "..." : "Copiar mensaje"}
+                                </button>
+                              </>
+                            ) : req.document ? (
+                              <>
+                                <a
+                                  href={`/api/v1/documents/${req.document.id}/access?stream=true`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="py-1.5 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg transition text-[11px]"
+                                >
+                                  Ver factura
+                                </a>
+
                                 <button
                                   type="button"
                                   onClick={() => handleCopyLink(req.id, req.document?.id)}
@@ -530,6 +571,13 @@ export default function RequesterInvoiceList() {
                                   {isMsgCopied ? "✓ Copiado" : isSharing ? "..." : "Copiar mensaje"}
                                 </button>
                               </>
+                            ) : (
+                              <Link
+                                href={`/requests/${req.id}`}
+                                className="py-1.5 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg transition text-[11px]"
+                              >
+                                Ver
+                              </Link>
                             )}
 
                             <Link
@@ -557,7 +605,7 @@ export default function RequesterInvoiceList() {
                         ) : (
                           <Link
                             href={`/requests/${req.id}`}
-                            className="py-1.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg transition text-[11px]"
+                            className="py-1.5 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg transition text-[11px]"
                           >
                             Ver
                           </Link>
@@ -572,30 +620,162 @@ export default function RequesterInvoiceList() {
         </div>
       )}
 
-      {/* MODAL EDICIÓN SOLICITUD PENDIENTE (SOLICITANTE) */}
-      <EditPendingRequestModal
-        request={editingRequest}
-        isOpen={!!editingRequest}
-        onClose={() => setEditingRequest(null)}
-        onSaved={(updated) => {
-          setRequests((prev) =>
-            prev.map((item) => (item.id === updated.id ? { ...item, ...updated } : item))
-          );
-        }}
-      />
+      {/* Modal de Edición de Solicitud Pendiente */}
+      {editingRequest && (
+        <EditPendingRequestModal
+          request={editingRequest}
+          isOpen={!!editingRequest}
+          onClose={() => setEditingRequest(null)}
+          onSaved={(updated) => {
+            setRequests((prev) =>
+              prev.map((item) => (item.id === updated.id ? { ...item, ...updated } : item))
+            );
+            setEditingRequest(null);
+          }}
+        />
+      )}
 
-      {/* MODAL DATOS DE CONTACTO DEL CLIENTE */}
-      {contactModalReq && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-md w-full p-6 space-y-5 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-start justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center font-bold text-lg">
-                  👤
-                </div>
+      {/* Modal de Documentos Tributarios Múltiples */}
+      {docsModalReq && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6 space-y-4 border border-slate-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">📄</span>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900">Datos de Contacto del Cliente</h3>
-                  <p className="text-[11px] text-slate-500 font-mono">{contactModalReq.requestNumber}</p>
+                  <h3 className="text-base font-extrabold text-slate-900">
+                    Documentos Tributarios — {docsModalReq.requestNumber}
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    {docsModalReq.customerLegalNameSnapshot}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDocsModalReq(null)}
+                className="text-slate-400 hover:text-slate-600 text-base font-bold p-1 rounded-lg hover:bg-slate-100 transition"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex justify-between items-center text-xs">
+                <span className="text-slate-600 font-medium">Total de la operación:</span>
+                <span className="font-mono font-bold text-slate-900 text-sm">
+                  {formatCLP(docsModalReq.expectedGrossTotal)}
+                </span>
+              </div>
+
+              <div className="space-y-2">
+                {(docsModalReq.documents || (docsModalReq.document ? [docsModalReq.document] : [])).map(
+                  (doc, idx) => {
+                    const isDocLinkCopied = copiedDocLinkId === doc.id;
+                    return (
+                      <div
+                        key={doc.id}
+                        className="p-3 bg-white rounded-xl border border-slate-200 hover:border-slate-300 transition flex items-center justify-between gap-3 text-xs"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <span className="h-7 w-7 bg-indigo-100 text-indigo-800 rounded-lg flex items-center justify-center font-bold text-xs shrink-0">
+                            #{doc.documentNumber || idx + 1}
+                          </span>
+                          <div>
+                            <span className="font-bold text-slate-900 block">
+                              Factura Documento #{doc.documentNumber || idx + 1}
+                            </span>
+                            <span className="text-[11px] text-slate-500">
+                              {(doc.fileSize / 1024).toFixed(1)} KB
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={`/api/v1/documents/${doc.id}/access?stream=true`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="py-1 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg transition text-[11px]"
+                          >
+                            Ver PDF ↗
+                          </a>
+
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              try {
+                                const url = await getOrFetchShareUrl(doc.id);
+                                if (url) {
+                                  await navigator.clipboard.writeText(url);
+                                  setCopiedDocLinkId(doc.id);
+                                  setTimeout(() => setCopiedDocLinkId(null), 2500);
+                                }
+                              } catch (e) {
+                                console.error(e);
+                              }
+                            }}
+                            className={`py-1 px-2.5 font-bold rounded-lg transition text-[11px] ${
+                              isDocLinkCopied
+                                ? "bg-emerald-600 text-white"
+                                : "bg-white hover:bg-slate-50 text-slate-700 border border-slate-300"
+                            }`}
+                          >
+                            {isDocLinkCopied ? "✓ Copiado" : "Copiar enlace"}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+                )}
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row gap-2 justify-between items-center">
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!docsModalReq) return;
+                  await handleCopyMessage(
+                    docsModalReq.id,
+                    docsModalReq.customerLegalNameSnapshot,
+                    undefined,
+                    docsModalReq.documents
+                  );
+                }}
+                disabled={sharingId !== null}
+                className="w-full sm:w-auto py-2 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-1.5"
+              >
+                <span>💬</span>
+                <span>{copiedMsgId === docsModalReq.id ? "✓ Mensaje Copiado" : "Copiar WhatsApp Consolidado"}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDocsModalReq(null)}
+                className="w-full sm:w-auto py-2 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition text-xs"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Datos de Contacto del Cliente */}
+      {contactModalReq && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4 border border-slate-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">👤</span>
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-900">
+                    Datos de Contacto del Cliente
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Solicitud #{contactModalReq.requestNumber}
+                  </p>
                 </div>
               </div>
               <button
@@ -655,7 +835,7 @@ export default function RequesterInvoiceList() {
                         {copiedPhone ? "✓ Copiado" : "Copiar"}
                       </button>
 
-                      {contactModalReq.document && (
+                      {(contactModalReq.documents && contactModalReq.documents.length > 0) || contactModalReq.document ? (
                         <button
                           type="button"
                           onClick={async () => {
@@ -664,23 +844,41 @@ export default function RequesterInvoiceList() {
                             const fullPhone = cleanDigits.startsWith("56")
                               ? cleanDigits
                               : `56${cleanDigits.replace(/^0+/, "")}`;
-                            const shareUrl = await getOrFetchShareUrl(contactModalReq.document!.id);
-                            if (shareUrl) {
+
+                            const docs = contactModalReq.documents || (contactModalReq.document ? [contactModalReq.document] : []);
+                            if (docs.length > 1) {
+                              const shareUrlsPromises = docs.map(async (d, index) => {
+                                const url = await getOrFetchShareUrl(d.id);
+                                return { documentNumber: d.documentNumber || index + 1, url: url || "" };
+                              });
+                              const shareUrls = await Promise.all(shareUrlsPromises);
                               const msg = formatWhatsAppInvoiceMessage(
                                 contactModalReq.customerLegalNameSnapshot,
-                                shareUrl
+                                shareUrls
                               );
                               window.open(
                                 `https://wa.me/${fullPhone}?text=${encodeURIComponent(msg)}`,
                                 "_blank"
                               );
+                            } else if (docs.length === 1) {
+                              const shareUrl = await getOrFetchShareUrl(docs[0].id);
+                              if (shareUrl) {
+                                const msg = formatWhatsAppInvoiceMessage(
+                                  contactModalReq.customerLegalNameSnapshot,
+                                  shareUrl
+                                );
+                                window.open(
+                                  `https://wa.me/${fullPhone}?text=${encodeURIComponent(msg)}`,
+                                  "_blank"
+                                );
+                              }
                             }
                           }}
                           className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded text-[11px] transition shadow-2xs"
                         >
                           💬 WhatsApp
                         </button>
-                      )}
+                      ) : null}
                     </div>
                   )}
                 </div>

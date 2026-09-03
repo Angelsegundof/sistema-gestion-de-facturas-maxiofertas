@@ -4,9 +4,10 @@
  * El c?lculo de neto para SII utiliza ROUND_HALF_UP a cero decimales.
  */
 
-import { ReconciliationStatus } from "./types";
+import { ReconciliationStatus, SplitDocumentBlock, SanitizedDocument } from "./types";
 
 export const DEFAULT_VAT_RATE_PERCENT = 19;
+export const MAX_ITEMS_PER_DOCUMENT = 10;
 
 /**
  * Calcula el precio unitario neto para el SII a partir del precio unitario bruto (IVA incluido)
@@ -215,3 +216,85 @@ export function formatCLP(amount: number): string {
   const formatted = rounded.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
   return `$${formatted}`;
 }
+
+/**
+ * Calcula la cantidad de documentos tributarios requeridos según el límite del SII (10 líneas por factura).
+ */
+export function calculateRequiredDocuments(itemCount: number): number {
+  if (itemCount <= 0) return 1;
+  return Math.ceil(itemCount / MAX_ITEMS_PER_DOCUMENT);
+}
+
+/**
+ * Divide determinísticamente los productos de una solicitud en bloques tributarios de hasta 10 ítems.
+ * Garantiza:
+ *   - items 1..10   -> Documento 1
+ *   - items 11..20  -> Documento 2
+ *   - items 21..30  -> Documento 3
+ *   - SUM(items de todos los documentos) = items de la solicitud
+ *   - SUM(total bruto de todos los documentos) = total bruto solicitado
+ */
+export function splitRequestItemsIntoDocuments<
+  T extends {
+    lineNumber?: number;
+    lineTotalGross?: number;
+    lineTotalNet?: number;
+    unitPriceGross?: number;
+    quantity?: number;
+    unitPriceNet?: number;
+  }
+>(
+  items: T[],
+  attachedDocuments?: SanitizedDocument[]
+): SplitDocumentBlock<T>[] {
+  const totalItems = items.length;
+  const totalDocuments = calculateRequiredDocuments(totalItems);
+
+  const blocks: SplitDocumentBlock<T>[] = [];
+
+  for (let docIdx = 0; docIdx < totalDocuments; docIdx++) {
+    const docNumber = docIdx + 1;
+    const startIdx = docIdx * MAX_ITEMS_PER_DOCUMENT;
+    const endIdx = Math.min((docIdx + 1) * MAX_ITEMS_PER_DOCUMENT, totalItems);
+    const slice = items.slice(startIdx, endIdx);
+
+    const expectedGrossTotal = slice.reduce((sum, it) => {
+      if (typeof it.lineTotalGross === "number") return sum + it.lineTotalGross;
+      const qty = it.quantity || 1;
+      const price = it.unitPriceGross || 0;
+      return sum + qty * price;
+    }, 0);
+
+    const expectedNetTotal = slice.reduce((sum, it) => {
+      if (typeof it.lineTotalNet === "number") return sum + it.lineTotalNet;
+      const qty = it.quantity || 1;
+      const net =
+        typeof it.unitPriceNet === "number"
+          ? it.unitPriceNet
+          : calculateNetPrice(it.unitPriceGross || 0);
+      return sum + qty * net;
+    }, 0);
+
+    const calculatedVatTotal = expectedGrossTotal - expectedNetTotal;
+    const matchedDoc =
+      attachedDocuments?.find(
+        (d) => (d.documentNumber || 1) === docNumber && !d.isVoided
+      ) || null;
+
+    blocks.push({
+      documentNumber: docNumber,
+      totalDocuments,
+      startLine: startIdx + 1,
+      endLine: endIdx,
+      items: slice,
+      itemCount: slice.length,
+      expectedGrossTotal,
+      expectedNetTotal,
+      calculatedVatTotal,
+      document: matchedDoc,
+    });
+  }
+
+  return blocks;
+}
+

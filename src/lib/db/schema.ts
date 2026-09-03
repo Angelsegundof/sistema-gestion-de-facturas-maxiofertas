@@ -254,6 +254,7 @@ export const documents = pgTable(
     mimeType: varchar("mime_type", { length: 100 }).notNull(),
     fileSize: bigint("file_size", { mode: "number" }).notNull(),
     invoiceRequestId: uuid("invoice_request_id").references(() => invoiceRequests.id, { onDelete: "cascade" }),
+    documentNumber: integer("document_number").notNull().default(1),
     creditNoteId: uuid("credit_note_id"),
     isVoided: boolean("is_voided").notNull().default(false),
     voidedAt: timestamp("voided_at", { withTimezone: true }),
@@ -265,6 +266,7 @@ export const documents = pgTable(
   },
   (table) => [
     index("documents_invoice_request_id_idx").on(table.invoiceRequestId),
+    index("documents_invoice_request_doc_num_idx").on(table.invoiceRequestId, table.documentNumber),
     index("documents_document_type_idx").on(table.documentType),
   ]
 );

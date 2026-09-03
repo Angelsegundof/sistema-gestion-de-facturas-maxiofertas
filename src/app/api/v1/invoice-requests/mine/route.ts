@@ -90,9 +90,13 @@ export async function GET(request: NextRequest) {
 
   const sanitizedList: SanitizedInvoiceRequest[] = requestList.map((r) => {
     const base = sanitizeInvoiceRequest(r);
-    const doc = attachedDocs.find((d) => d.invoiceRequestId === r.id);
-    if (doc) {
-      base.document = sanitizeDocument(doc);
+    const reqDocs = attachedDocs
+      .filter((d) => d.invoiceRequestId === r.id && !d.isVoided)
+      .sort((a, b) => (a.documentNumber || 1) - (b.documentNumber || 1));
+
+    if (reqDocs.length > 0) {
+      base.documents = reqDocs.map((d) => sanitizeDocument(d));
+      base.document = sanitizeDocument(reqDocs[0]);
     }
     const rect = attachedRects.find((rec) => rec.invoiceRequestId === r.id);
     if (rect) {

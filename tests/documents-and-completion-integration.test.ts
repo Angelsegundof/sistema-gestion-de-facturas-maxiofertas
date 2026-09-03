@@ -88,6 +88,8 @@ describe("Fase 7: R2, Documentos y Finalización de Factura (Integration)", () =
       "0004_wet_mulholland_black.sql",
       "0005_uneven_lady_bullseye.sql",
       "0006_shallow_skaar.sql",
+      "0007_document_share_tokens.sql",
+      "0008_split_invoices_document_number.sql",
     ];
 
     for (const mFile of migrations) {
@@ -109,58 +111,60 @@ describe("Fase 7: R2, Documentos y Finalización de Factura (Integration)", () =
     await pg.exec(`
       INSERT INTO users (id, email, name, password_hash, role, warehouse_id, active)
       VALUES
-        ('a1eebc99-9c0b-4ef8-bb6d-6bb9bd380a01', 'ejecutor@maxiofertas.cl', 'Ejecutor Principal', 'hash', 'INVOICE_EXECUTOR', NULL, true),
-        ('a2eebc99-9c0b-4ef8-bb6d-6bb9bd380a02', 'otro.ejecutor@maxiofertas.cl', 'Otro Ejecutor', 'hash', 'INVOICE_EXECUTOR', NULL, true),
-        ('b1eebc99-9c0b-4ef8-bb6d-6bb9bd380a01', 'bodega.norte@maxiofertas.cl', 'Usuario Bodega Norte', 'hash', 'WAREHOUSE_USER', 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01', true),
-        ('b2eebc99-9c0b-4ef8-bb6d-6bb9bd380a02', 'bodega.sur@maxiofertas.cl', 'Usuario Bodega Sur', 'hash', 'WAREHOUSE_USER', 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02', true);
+        ('a1eebc99-9c0b-4ef8-bb6d-6bb9bd380a01', 'admin@maxiofertas.cl', 'Admin User', 'hash', 'ADMIN', null, true),
+        ('a2eebc99-9c0b-4ef8-bb6d-6bb9bd380a02', 'executor@maxiofertas.cl', 'Executor User', 'hash', 'ADMIN', null, true),
+        ('a3eebc99-9c0b-4ef8-bb6d-6bb9bd380a03', 'other@maxiofertas.cl', 'Other Executor', 'hash', 'ADMIN', null, true),
+        ('b1eebc99-9c0b-4ef8-bb6d-6bb9bd380a01', 'requester@maxiofertas.cl', 'Requester User', 'hash', 'WAREHOUSE_USER', 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01', true);
     `);
 
     // Seed Customer
     await pg.exec(`
-      INSERT INTO customers (id, rut_canonical, rut_display, legal_name, business_activity, active)
-      VALUES
-        ('d0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01', '76432109K', '76.432.109-K', 'Comercializadora Ejemplo SPA', 'Venta al por mayor', true);
+      INSERT INTO customers (id, rut_canonical, rut_display, legal_name, business_activity, phone, email, active)
+      VALUES ('e1eebc99-9c0b-4ef8-bb6d-6bb9bd380a01', '76432109-K', '76.432.109-K', 'Comercializadora del Sur SpA', 'Venta al por mayor', '+56912345678', 'contacto@comercialsur.cl', true);
     `);
   });
 
-  describe("1. Validaciones de Archivo PDF", () => {
-    it("Acepta archivo PDF con firma %PDF válida y tamaño <= 2MB", () => {
-      const buf = createValidPdfBuffer("Factura 101");
-      const res = validatePdfBuffer(buf, buf.length, "application/pdf");
+  describe("1. Validaciones Criptográficas y Reglas de Archivo PDF", () => {
+    it("Valida correctamente un PDF válido con magic bytes %PDF", () => {
+      const validPdf = Buffer.concat([
+        Buffer.from("%PDF-1.4\n%"),
+        Buffer.alloc(100, 0x20),
+      ]);
+      const res = validatePdfBuffer(validPdf, validPdf.length, "application/pdf");
       expect(res.valid).toBe(true);
     });
 
-    it("Rechaza archivo no PDF (sin magic bytes %PDF)", () => {
-      const textBuf = Buffer.from("<html><body>Not a PDF</body></html>", "utf-8");
-      const res = validatePdfBuffer(textBuf, textBuf.length, "application/pdf");
+    it("Rechaza un archivo que no sea PDF (magic bytes inválidos)", () => {
+      const fakePdf = Buffer.from("<html><body>Not a PDF</body></html>");
+      const res = validatePdfBuffer(fakePdf, fakePdf.length, "application/pdf");
       expect(res.valid).toBe(false);
-      expect(res.reason).toContain("firma válida de documento PDF");
+      expect(res.reason).toContain("magic bytes");
     });
 
-    it("Rechaza archivo mayor a 2 MB", () => {
-      const oversize = MAX_PDF_SIZE_BYTES + 10;
-      const buf = Buffer.alloc(oversize);
-      buf[0] = 0x25;
-      buf[1] = 0x50;
-      buf[2] = 0x44;
-      buf[3] = 0x46; // %PDF
-      const res = validatePdfBuffer(buf, oversize, "application/pdf");
+    it("Rechaza un archivo mayor al límite de 15MB", () => {
+      const largePdf = Buffer.concat([
+        Buffer.from("%PDF-1.4\n"),
+        Buffer.alloc(MAX_PDF_SIZE_BYTES + 10, 0x20),
+      ]);
+      const res = validatePdfBuffer(largePdf, largePdf.length, "application/pdf");
       expect(res.valid).toBe(false);
-      expect(res.reason).toContain("supera el tamaño máximo permitido de 2 MB");
+      expect(res.reason).toContain("excede el límite");
     });
 
-    it("Rechaza archivo vac?o", () => {
+    it("Rechaza archivo vacío", () => {
       const emptyBuf = Buffer.alloc(0);
       const res = validatePdfBuffer(emptyBuf, 0, "application/pdf");
       expect(res.valid).toBe(false);
-      expect(res.reason).toContain("está vac?o");
+      expect(res.reason).toContain("está vacío");
     });
 
-    it("Genera storage key determin?stica e inmune a path traversal", () => {
+    it("Genera storage key determinística e inmune a path traversal", () => {
       const fixedDate = new Date("2026-08-20T12:00:00Z");
       const key = generateInvoiceStorageKey(
         "FAC-2026-000184",
         "../../etc/passwd_76.432.109-K",
+        1,
+        1,
         fixedDate
       );
       expect(key).toBe("facturas/2026/08/FAC-2026-000184/FAC-2026-000184_76432109K.pdf");

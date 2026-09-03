@@ -430,6 +430,23 @@ function EditPendingRequestForm({
             })}
           </div>
 
+          {/* Split Invoicing Informational Banner */}
+          {items.length > 10 && (
+            <div className="p-3.5 bg-indigo-50 border border-indigo-200 rounded-xl text-xs text-indigo-950 space-y-1.5">
+              <div className="flex items-center gap-1.5 font-bold text-indigo-900">
+                <span>ℹ️</span>
+                <span>Facturación Dividida ({Math.ceil(items.length / 10)} documentos tributarios)</span>
+              </div>
+              <p className="text-indigo-800 text-[11px]">
+                Esta solicitud contiene <strong>{items.length} productos</strong>. Como el SII permite máximo 10 ítems por factura, se emitirá en <strong>{Math.ceil(items.length / 10)} documentos</strong> (
+                {Array.from({ length: Math.ceil(items.length / 10) })
+                  .map((_, i) => `Doc ${i + 1}: ${Math.min((i + 1) * 10, items.length) - i * 10} prods`)
+                  .join(", ")}
+                ).
+              </p>
+            </div>
+          )}
+
           {/* Recalculated Summary Card */}
           <div className="bg-amber-50/70 border border-amber-200 rounded-xl p-3 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
             <div className="flex items-center gap-4 text-slate-700 font-semibold">

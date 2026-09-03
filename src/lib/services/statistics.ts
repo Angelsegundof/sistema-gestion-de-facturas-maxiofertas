@@ -149,7 +149,8 @@ export async function getStatisticsSummaryService(
     .from(documents)
     .innerJoin(invoiceRequests, eq(documents.invoiceRequestId, invoiceRequests.id))
     .leftJoin(rectifications, eq(rectifications.replacementInvoiceDocumentId, documents.id))
-    .where(and(...origConditions));
+    .where(and(...origConditions))
+    .groupBy(invoiceRequests.id, invoiceRequests.siiGrossTotal, invoiceRequests.expectedGrossTotal);
 
   // B. Replacement Invoices on completed rectifications in period and not voided
   const repConditions = [
@@ -391,7 +392,8 @@ export async function getStatisticsByWarehouseService(
     .from(documents)
     .innerJoin(invoiceRequests, eq(documents.invoiceRequestId, invoiceRequests.id))
     .leftJoin(rectifications, eq(rectifications.replacementInvoiceDocumentId, documents.id))
-    .where(and(...origConditions));
+    .where(and(...origConditions))
+    .groupBy(invoiceRequests.id, invoiceRequests.warehouseId, invoiceRequests.siiGrossTotal, invoiceRequests.expectedGrossTotal);
 
   // 3. Fetch Valid Replacement Invoices in period
   const repConditions = [
@@ -507,7 +509,8 @@ export async function getMonthlyEvolutionService(
       .from(documents)
       .innerJoin(invoiceRequests, eq(documents.invoiceRequestId, invoiceRequests.id))
       .leftJoin(rectifications, eq(rectifications.replacementInvoiceDocumentId, documents.id))
-      .where(and(...origConditions));
+      .where(and(...origConditions))
+      .groupBy(invoiceRequests.id, invoiceRequests.siiGrossTotal, invoiceRequests.expectedGrossTotal);
 
     // Valid Replacement
     const repConditions = [

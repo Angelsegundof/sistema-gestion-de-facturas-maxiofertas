@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, asc } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import {
   invoiceRequests,
@@ -150,7 +150,7 @@ export async function GET(
     }));
   }
 
-  // Populate attached invoice document if present (prioritize latest valid/replacement document)
+  // Populate attached invoice documents if present (prioritize valid/non-voided documents)
   const docList = await db
     .select()
     .from(documents)
@@ -160,17 +160,26 @@ export async function GET(
         eq(documents.documentType, "INVOICE")
       )
     )
-    .orderBy(desc(documents.createdAt));
+    .orderBy(asc(documents.documentNumber), desc(documents.createdAt));
 
   if (docList.length > 0) {
-    const activeDoc = docList.find((d) => !d.isVoided) || docList[0];
-    const accessUrl = r2Client.isConfigured()
-      ? await r2Client.generatePresignedDownloadUrl({
-          key: activeDoc.storageKey,
-          expiresInSeconds: 900,
-        })
-      : `/api/v1/documents/${activeDoc.id}/access?stream=true`;
-    sanitized.document = sanitizeDocument(activeDoc, accessUrl);
+    const activeDocs = docList.filter((d) => !d.isVoided);
+    const docsToSanitize = activeDocs.length > 0 ? activeDocs : docList;
+
+    const sanitizedDocsPromises = docsToSanitize.map(async (doc) => {
+      const accessUrl = r2Client.isConfigured()
+        ? await r2Client.generatePresignedDownloadUrl({
+            key: doc.storageKey,
+            expiresInSeconds: 900,
+          })
+        : `/api/v1/documents/${doc.id}/access?stream=true`;
+      return sanitizeDocument(doc, accessUrl);
+    });
+
+    const sanitizedDocs = await Promise.all(sanitizedDocsPromises);
+    sanitizedDocs.sort((a, b) => (a.documentNumber || 1) - (b.documentNumber || 1));
+    sanitized.documents = sanitizedDocs;
+    sanitized.document = sanitizedDocs[0] || null;
   }
 
   // Populate rectifications if any

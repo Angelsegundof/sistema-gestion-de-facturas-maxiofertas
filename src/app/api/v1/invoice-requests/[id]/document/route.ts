@@ -62,6 +62,9 @@ export async function POST(
     );
   }
 
+  const rawDocNum = formData.get("documentNumber");
+  const documentNumber = rawDocNum ? parseInt(rawDocNum.toString(), 10) : 1;
+
   const arrayBuffer = await file.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
 
@@ -75,7 +78,10 @@ export async function POST(
         mimeType: file.type || "application/pdf",
         fileSize: buffer.length,
       },
-      ipAddress
+      {
+        documentNumber: isNaN(documentNumber) ? 1 : documentNumber,
+        ipAddress,
+      }
     );
 
     return NextResponse.json<ApiResponse<{ document: SanitizedDocument }>>(

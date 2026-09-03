@@ -648,11 +648,18 @@ export default function GestionFacturacionPage() {
                       return (
                         <tr key={r.id} className="hover:bg-slate-50 transition">
                           <td className="p-3.5 font-bold text-slate-900">
-                            {r.requestNumber}
+                            <div>{r.requestNumber}</div>
                             {r.duplicateWarning && (
-                              <span className="ml-1.5 text-[10px] font-extrabold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded border border-amber-300">
+                              <span className="inline-block mt-0.5 text-[10px] font-extrabold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded border border-amber-300">
                                 ⚠ Duplicado
                               </span>
+                            )}
+                            {(r.isSplit || (r.requiredDocuments && r.requiredDocuments > 1)) && (
+                              <div className="mt-0.5">
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">
+                                  ✂️ {r.requiredDocuments} docs
+                                </span>
+                              </div>
                             )}
                           </td>
                           <td className="p-3.5 font-medium text-slate-700">{r.warehouse?.name || "—"}</td>

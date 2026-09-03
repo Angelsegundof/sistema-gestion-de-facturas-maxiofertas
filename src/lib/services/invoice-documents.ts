@@ -1,4 +1,4 @@
-import { eq, and, sql, desc } from "drizzle-orm";
+import { eq, and, sql, desc, asc } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import {
   invoiceRequests,
@@ -18,6 +18,12 @@ import {
 } from "@/domain/types";
 import { sanitizeQueueInvoiceRequest } from "./invoice-queue";
 
+import {
+  calculateRequestTotals,
+  calculateRequiredDocuments,
+  MAX_ITEMS_PER_DOCUMENT,
+} from "@/domain/pricing";
+
 export const MAX_PDF_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB
 
 /**
@@ -29,7 +35,7 @@ export function validatePdfBuffer(
   mimeType: string
 ): { valid: boolean; reason?: string } {
   if (!buffer || buffer.length === 0 || fileSize <= 0) {
-    return { valid: false, reason: "El archivo está vac?o." };
+    return { valid: false, reason: "El archivo está vacío." };
   }
 
   if (fileSize > MAX_PDF_SIZE_BYTES || buffer.length > MAX_PDF_SIZE_BYTES) {
@@ -57,12 +63,15 @@ export function validatePdfBuffer(
 }
 
 /**
- * Genera una storage key determin?stica y segura server-side.
- * Estructura: facturas/YYYY/MM/FAC-YYYY-NNNNNN/FAC-YYYY-NNNNNN_RUT.pdf
+ * Genera una storage key determinística y segura server-side.
+ * Para factura única: facturas/YYYY/MM/FAC-YYYY-NNNNNN/FAC-YYYY-NNNNNN_RUT.pdf
+ * Para facturación dividida: facturas/YYYY/MM/FAC-YYYY-NNNNNN/FAC-YYYY-NNNNNN_DOC{N}_RUT.pdf
  */
 export function generateInvoiceStorageKey(
   requestNumber: string,
   customerRut: string,
+  documentNumber: number = 1,
+  totalDocuments: number = 1,
   date: Date = new Date()
 ): string {
   const year = date.getFullYear().toString();
@@ -70,12 +79,17 @@ export function generateInvoiceStorageKey(
   const cleanRut = customerRut.replace(/[^0-9kK]/g, "").toUpperCase();
   const cleanRequestNumber = requestNumber.replace(/[^a-zA-Z0-9-]/g, "");
 
+  if (totalDocuments > 1 || documentNumber > 1) {
+    return `facturas/${year}/${month}/${cleanRequestNumber}/${cleanRequestNumber}_DOC${documentNumber}_${cleanRut}.pdf`;
+  }
+
   return `facturas/${year}/${month}/${cleanRequestNumber}/${cleanRequestNumber}_${cleanRut}.pdf`;
 }
 
 export function sanitizeDocument(d: Document, accessUrl?: string): SanitizedDocument {
   return {
     id: d.id,
+    documentNumber: d.documentNumber || 1,
     documentType: d.documentType,
     storageProvider: d.storageProvider,
     storageKey: d.storageKey,
@@ -85,6 +99,9 @@ export function sanitizeDocument(d: Document, accessUrl?: string): SanitizedDocu
     fileSize: d.fileSize,
     invoiceRequestId: d.invoiceRequestId,
     creditNoteId: d.creditNoteId,
+    isVoided: d.isVoided,
+    voidedAt: d.voidedAt ? d.voidedAt.toISOString() : null,
+    voidedByDocumentId: d.voidedByDocumentId,
     uploadedBy: d.uploadedBy,
     createdAt: d.createdAt.toISOString(),
     accessUrl,
@@ -100,13 +117,19 @@ export async function uploadInvoiceDocumentService(
     mimeType: string;
     fileSize: number;
   },
-  ipAddress?: string,
+  options?: {
+    documentNumber?: number;
+    ipAddress?: string;
+  } | string,
   dbOverride?: unknown
 ): Promise<SanitizedDocument> {
   const db = (dbOverride as ReturnType<typeof getDb>) || getDb();
   if (!db) {
     throw new Error("Base de datos no disponible.");
   }
+
+  const ipAddress = typeof options === "string" ? options : options?.ipAddress;
+  const targetDocNumber = typeof options === "object" && options?.documentNumber ? options.documentNumber : 1;
 
   if (currentUser.role !== "INVOICE_EXECUTOR" && currentUser.role !== "ADMIN" && currentUser.role !== "MANAGEMENT") {
     throw new Error("FORBIDDEN: No tienes permisos para cargar documentos de factura.");
@@ -137,6 +160,17 @@ export async function uploadInvoiceDocumentService(
     throw new Error("FORBIDDEN: No puedes cargar documentos a una solicitud asignada a otro ejecutor.");
   }
 
+  // Validate documentNumber against required documents count
+  const itemsList = await db
+    .select()
+    .from(invoiceRequestItems)
+    .where(eq(invoiceRequestItems.invoiceRequestId, targetReq.id));
+
+  const totalRequiredDocs = calculateRequiredDocuments(itemsList.length);
+  if (targetDocNumber < 1 || targetDocNumber > totalRequiredDocs) {
+    throw new Error(`VALIDATION_ERROR: El número de documento (${targetDocNumber}) debe estar entre 1 y ${totalRequiredDocs}.`);
+  }
+
   // Server-side PDF validation
   const validation = validatePdfBuffer(file.buffer, file.fileSize, file.mimeType);
   if (!validation.valid) {
@@ -147,17 +181,21 @@ export async function uploadInvoiceDocumentService(
   const storageKey = generateInvoiceStorageKey(
     targetReq.requestNumber,
     targetReq.customerRutSnapshot,
+    targetDocNumber,
+    totalRequiredDocs,
     new Date()
   );
 
-  // Check for previous document on this request (for replacement)
+  // Check for previous document for this specific document_number on this request (for replacement)
   const existingDocs = await db
     .select()
     .from(documents)
     .where(
       and(
         eq(documents.invoiceRequestId, targetReq.id),
-        eq(documents.documentType, "INVOICE")
+        eq(documents.documentType, "INVOICE"),
+        eq(documents.documentNumber, targetDocNumber),
+        eq(documents.isVoided, false)
       )
     )
     .limit(1);
@@ -205,6 +243,7 @@ export async function uploadInvoiceDocumentService(
         .insert(documents)
         .values({
           documentType: "INVOICE",
+          documentNumber: targetDocNumber,
           storageProvider: "R2",
           storageKey,
           fileName: file.fileName.slice(0, 500),
@@ -232,6 +271,8 @@ export async function uploadInvoiceDocumentService(
     metadata: {
       invoiceRequestId: targetReq.id,
       requestNumber: targetReq.requestNumber,
+      documentNumber: targetDocNumber,
+      totalRequiredDocs,
       storageKey: insertedDoc.storageKey,
       fileSize: insertedDoc.fileSize,
     },
@@ -275,29 +316,36 @@ export async function completeInvoiceRequestService(
 
   const targetReq = existingReqList[0];
 
+  const itemsList = await db
+    .select()
+    .from(invoiceRequestItems)
+    .where(eq(invoiceRequestItems.invoiceRequestId, targetReq.id))
+    .orderBy(invoiceRequestItems.lineNumber);
+
+  const totalRequiredDocs = calculateRequiredDocuments(itemsList.length);
+
+  // Fetch all active non-voided INVOICE documents for this request
+  const attachedDocs = await db
+    .select()
+    .from(documents)
+    .where(
+      and(
+        eq(documents.invoiceRequestId, targetReq.id),
+        eq(documents.documentType, "INVOICE"),
+        eq(documents.isVoided, false)
+      )
+    )
+    .orderBy(asc(documents.documentNumber));
+
   // Idempotency: If already COMPLETED, return current state smoothly
   if (targetReq.status === "COMPLETED") {
-    const itemsList = await db
-      .select()
-      .from(invoiceRequestItems)
-      .where(eq(invoiceRequestItems.invoiceRequestId, targetReq.id))
-      .orderBy(invoiceRequestItems.lineNumber);
-
-    const docList = await db
-      .select()
-      .from(documents)
-      .where(
-        and(
-          eq(documents.invoiceRequestId, targetReq.id),
-          eq(documents.documentType, "INVOICE")
-        )
-      )
-      .limit(1);
-
     const sanitized = sanitizeQueueInvoiceRequest(targetReq, itemsList);
-    if (docList.length > 0) {
-      sanitized.document = sanitizeDocument(docList[0]);
+    sanitized.documents = attachedDocs.map((d) => sanitizeDocument(d));
+    if (attachedDocs.length > 0) {
+      sanitized.document = sanitizeDocument(attachedDocs[0]);
     }
+    sanitized.requiredDocuments = totalRequiredDocs;
+    sanitized.isSplit = totalRequiredDocs > 1;
     return sanitized;
   }
 
@@ -310,23 +358,20 @@ export async function completeInvoiceRequestService(
     throw new Error("FORBIDDEN: No puedes finalizar una solicitud asignada a otro ejecutor.");
   }
 
-  // Document Check: MUST have valid INVOICE PDF registered (MANDATORY)
-  const attachedDocs = await db
-    .select()
-    .from(documents)
-    .where(
-      and(
-        eq(documents.invoiceRequestId, targetReq.id),
-        eq(documents.documentType, "INVOICE")
-      )
-    )
-    .limit(1);
-
-  if (attachedDocs.length === 0) {
-    throw new Error("MISSING_DOCUMENT: Debes cargar el PDF de la factura antes de finalizar.");
+  // Check that ALL required document parts (1..totalRequiredDocs) are uploaded
+  const uploadedDocNumbers = new Set(attachedDocs.map((d) => d.documentNumber || 1));
+  const missingParts: number[] = [];
+  for (let docNum = 1; docNum <= totalRequiredDocs; docNum++) {
+    if (!uploadedDocNumbers.has(docNum)) {
+      missingParts.push(docNum);
+    }
   }
 
-  const invoiceDoc = attachedDocs[0];
+  if (missingParts.length > 0) {
+    throw new Error(
+      `MISSING_DOCUMENT: Faltan documentos tributarios por cargar (${attachedDocs.length} de ${totalRequiredDocs} cargados). Falta documento: ${missingParts.join(", ")}.`
+    );
+  }
 
   // Atomic completion transition in PostgreSQL
   const [completedReq] = await db
@@ -348,6 +393,7 @@ export async function completeInvoiceRequestService(
     throw new Error("CONCURRENCY_ERROR: La solicitud fue modificada concurrentemente.");
   }
 
+  // Log Audit
   await logAuditEvent({
     userId: currentUser.id,
     action: "INVOICE_COMPLETED",
@@ -355,23 +401,22 @@ export async function completeInvoiceRequestService(
     entityId: completedReq.id,
     metadata: {
       requestNumber: completedReq.requestNumber,
+      isSplit: totalRequiredDocs > 1,
+      requiredDocuments: totalRequiredDocs,
+      documentsCount: attachedDocs.length,
       expectedGrossTotal: completedReq.expectedGrossTotal,
       siiGrossTotal: completedReq.siiGrossTotal,
-      reconciliationStatus: completedReq.reconciliationStatus,
-      documentId: invoiceDoc.id,
-      storageKey: invoiceDoc.storageKey,
     },
     ipAddress,
   });
 
-  const itemsList = await db
-    .select()
-    .from(invoiceRequestItems)
-    .where(eq(invoiceRequestItems.invoiceRequestId, completedReq.id))
-    .orderBy(invoiceRequestItems.lineNumber);
-
   const sanitized = sanitizeQueueInvoiceRequest(completedReq, itemsList);
-  sanitized.document = sanitizeDocument(invoiceDoc);
+  sanitized.documents = attachedDocs.map((d) => sanitizeDocument(d));
+  if (attachedDocs.length > 0) {
+    sanitized.document = sanitizeDocument(attachedDocs[0]);
+  }
+  sanitized.requiredDocuments = totalRequiredDocs;
+  sanitized.isSplit = totalRequiredDocs > 1;
 
   return sanitized;
 }

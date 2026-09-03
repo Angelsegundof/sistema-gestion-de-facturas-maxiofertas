@@ -199,7 +199,9 @@ const ALL_MIGRATIONS = [
     "raw_payload" jsonb,
     "created_at" timestamp with time zone DEFAULT now() NOT NULL
   );
-  --> statement-breakpoint
+  `,
+  // 0007
+  `
   CREATE TABLE IF NOT EXISTS "document_share_tokens" (
     "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
     "document_id" uuid NOT NULL,
@@ -210,6 +212,12 @@ const ALL_MIGRATIONS = [
     "revoked_at" timestamp with time zone,
     "created_at" timestamp with time zone DEFAULT now() NOT NULL
   );
+  `,
+  // 0008
+  `
+  ALTER TABLE "documents" ADD COLUMN IF NOT EXISTS "document_number" integer DEFAULT 1 NOT NULL;
+  --> statement-breakpoint
+  CREATE INDEX IF NOT EXISTS "idx_documents_request_docnum" ON "documents" ("invoice_request_id", "document_number");
   `,
 ];
 

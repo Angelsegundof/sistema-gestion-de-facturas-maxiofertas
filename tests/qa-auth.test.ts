@@ -30,6 +30,8 @@ describe("QA-001 & QA-002: QA Local Authentication & Role Isolation", () => {
       "0004_wet_mulholland_black.sql",
       "0005_uneven_lady_bullseye.sql",
       "0006_shallow_skaar.sql",
+      "0007_document_share_tokens.sql",
+      "0008_split_invoices_document_number.sql",
     ];
 
     for (const m of migrations) {

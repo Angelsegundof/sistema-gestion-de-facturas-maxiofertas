@@ -570,6 +570,37 @@ export default function SolicitarFacturaPage() {
             >
               + Agregar otro producto
             </button>
+
+            {/* Split Invoicing Informational Banner */}
+            {items.length > 10 && (
+              <div className="mt-4 p-4 bg-indigo-50 border border-indigo-200 rounded-xl text-xs text-indigo-950 space-y-2">
+                <div className="flex items-center gap-2 font-bold text-indigo-900 text-sm">
+                  <span>ℹ️</span>
+                  <span>Facturación Dividida ({Math.ceil(items.length / 10)} documentos tributarios)</span>
+                </div>
+                <p className="text-indigo-800">
+                  Esta solicitud contiene <strong>{items.length} productos</strong>. El SII permite un máximo de 10 líneas por factura, por lo que se procesará en <strong>{Math.ceil(items.length / 10)} documentos tributarios</strong>:
+                </p>
+                <div className="bg-white/80 p-3 rounded-lg border border-indigo-200 space-y-1 font-mono text-[11px] text-indigo-900">
+                  {Array.from({ length: Math.ceil(items.length / 10) }).map((_, idx) => {
+                    const start = idx * 10 + 1;
+                    const end = Math.min((idx + 1) * 10, items.length);
+                    const count = end - start + 1;
+                    return (
+                      <div key={idx} className="flex justify-between items-center">
+                        <span>• Documento {idx + 1}:</span>
+                        <span>
+                          {count} {count === 1 ? "producto" : "productos"} (líneas {start}–{end})
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="text-[11px] text-indigo-700 italic">
+                  No necesitas crear solicitudes separadas. El sistema mantendrá tu solicitud como una sola compra comercial.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Bloque 3: Total y Observaciones */}

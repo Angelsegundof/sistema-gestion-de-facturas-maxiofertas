@@ -96,6 +96,7 @@ export type RectificationReason = (typeof rectificationReasons)[number];
 
 export interface SanitizedDocument {
   id: string;
+  documentNumber?: number;
   documentType: DocumentType;
   storageProvider: StorageProvider;
   storageKey: string;
@@ -219,8 +220,24 @@ export interface SanitizedInvoiceRequest {
   items?: SanitizedInvoiceRequestItem[];
   corrections?: SanitizedRequestCorrection[];
   document?: SanitizedDocument | null;
+  documents?: SanitizedDocument[];
+  requiredDocuments?: number;
+  isSplit?: boolean;
   rectifications?: SanitizedRectification[];
   activeRectification?: SanitizedRectification | null;
+}
+
+export interface SplitDocumentBlock<T = SanitizedInvoiceRequestItem> {
+  documentNumber: number;
+  totalDocuments: number;
+  startLine: number;
+  endLine: number;
+  items: T[];
+  itemCount: number;
+  expectedGrossTotal: number;
+  expectedNetTotal: number;
+  calculatedVatTotal: number;
+  document?: SanitizedDocument | null;
 }
 
 export interface SanitizedCreditNote {

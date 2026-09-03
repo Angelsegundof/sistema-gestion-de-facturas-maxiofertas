@@ -3,12 +3,19 @@
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { formatCLP, calculateReconciliation, ReconciliationResult } from "@/domain/pricing";
+import {
+  formatCLP,
+  calculateReconciliation,
+  splitRequestItemsIntoDocuments,
+  calculateRequiredDocuments,
+  ReconciliationResult,
+} from "@/domain/pricing";
 import {
   SanitizedInvoiceRequest,
   RequestCorrectionReason,
   SanitizedUser,
   SanitizedDocument,
+  SplitDocumentBlock,
 } from "@/domain/types";
 
 const REASON_LABELS: Record<RequestCorrectionReason, string> = {
@@ -46,7 +53,9 @@ export default function WorktablePage() {
   // Document Upload state
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadingPdf, setUploadingPdf] = useState(false);
+  const [uploadingDocNumber, setUploadingDocNumber] = useState<number | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadErrorsByDoc, setUploadErrorsByDoc] = useState<Record<number, string>>({});
   const [uploadedDocument, setUploadedDocument] = useState<SanitizedDocument | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -62,141 +71,135 @@ export default function WorktablePage() {
   const [submittingObservation, setSubmittingObservation] = useState(false);
   const [observationError, setObservationError] = useState<string | null>(null);
 
+  // Initial Data Fetching
   useEffect(() => {
-    async function loadData() {
-      if (!requestId) return;
+    async function fetchData() {
       try {
-        const userRes = await fetch("/api/v1/auth/session");
-        const userData = await userRes.json();
-        if (userData.success && userData.data?.user) {
-          setCurrentUser(userData.data.user);
+        const [meRes, reqRes] = await Promise.all([
+          fetch("/api/v1/auth/me"),
+          fetch(`/api/v1/invoice-requests/${requestId}`),
+        ]);
+
+        const meData = await meRes.json();
+        const reqData = await reqRes.json();
+
+        if (meData.success && meData.data?.user) {
+          setCurrentUser(meData.data.user);
         }
 
-        const res = await fetch(`/api/v1/invoice-requests/${requestId}`);
-        const data = await res.json();
-        if (data.success && data.data?.request) {
-          const req: SanitizedInvoiceRequest = data.data.request;
+        if (reqData.success && reqData.data?.request) {
+          const req: SanitizedInvoiceRequest = reqData.data.request;
           setRequestData(req);
-          if (req.status === "COMPLETED") {
-            setIsCompleted(true);
-          }
+
           if (req.document) {
             setUploadedDocument(req.document);
           }
+
+          if (req.status === "COMPLETED") {
+            setIsCompleted(true);
+          }
+
           if (req.siiGrossTotal) {
             setSiiInput(req.siiGrossTotal.toString());
-            if (req.reconciliationStatus && req.grossDifference !== null && req.grossDifference !== undefined) {
-              setReconciliationSaved({
-                expectedGrossTotal: req.expectedGrossTotal,
-                siiGrossTotal: req.siiGrossTotal,
-                grossDifference: req.grossDifference,
-                status: req.reconciliationStatus,
-                canProceed: req.reconciliationStatus !== "MISMATCH",
-                message:
-                  req.reconciliationStatus === "MATCH"
-                    ? "Los valores coinciden exactamente."
-                    : req.reconciliationStatus === "ROUNDING_ACCEPTED"
-                    ? `Diferencia de redondeo aceptada (${req.grossDifference > 0 ? `+${req.grossDifference}` : req.grossDifference} CLP).`
-                    : `Los valores no coinciden (diferencia de ${req.grossDifference > 0 ? `+${req.grossDifference}` : req.grossDifference} CLP). Revisa los precios netos ingresados en el SII antes de continuar.`,
-              });
-            }
+            setReconciliationSaved(
+              calculateReconciliation(req.expectedGrossTotal, req.siiGrossTotal)
+            );
           }
         } else {
-          setError(data.error?.message || "No se encontró la solicitud de factura.");
+          setError(reqData.error?.message || "No se pudo cargar la información de la solicitud.");
         }
       } catch {
-        setError("Error de comunicación al consultar la solicitud.");
+        setError("Error de red al conectar con el servidor.");
       } finally {
         setLoading(false);
       }
     }
-    loadData();
+
+    fetchData();
   }, [requestId]);
 
-  const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedField(label);
-    setTimeout(() => {
-      setCopiedField(null);
-    }, 2000);
+  // Copy to Clipboard Utility
+  const copyToClipboard = async (text: string, fieldName: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedField(fieldName);
+      setTimeout(() => setCopiedField(null), 2500);
+    } catch {
+      // Fallback
+      setCopiedField(`${fieldName} (Error al copiar)`);
+    }
   };
 
   const copyAllMainData = () => {
     if (!requestData) return;
-    const itemsText = (requestData.items || [])
-      .map((i) => `? ${i.description}: ${i.quantity} un. x ${formatCLP(i.unitPriceGross)} (Neto SII: ${formatCLP(i.unitPriceNet)})`)
-      .join("\n");
-
-    const block = `SOLICITUD: ${requestData.requestNumber}
-RUT: ${requestData.customerRutSnapshot}
-RAZ?N SOCIAL: ${requestData.customerLegalNameSnapshot}
-GIRO: ${requestData.customerBusinessActivitySnapshot}
-TOTAL: ${formatCLP(requestData.expectedGrossTotal)}
-PRODUCTOS:
-${itemsText}`;
-
+    const block = `RUT: ${requestData.customerRutSnapshot}\nRazón Social: ${requestData.customerLegalNameSnapshot}\nGiro: ${requestData.customerBusinessActivitySnapshot}`;
     copyToClipboard(block, "Datos principales");
   };
 
-  // Live preview calculation when typing SII total
-  const parsedSiiTotal = parseInt(siiInput.replace(/\D/g, ""), 10);
-  let liveReconciliation: ReconciliationResult | null = null;
-  if (requestData && !isNaN(parsedSiiTotal) && parsedSiiTotal > 0) {
-    try {
-      liveReconciliation = calculateReconciliation(requestData.expectedGrossTotal, parsedSiiTotal);
-    } catch {
-      liveReconciliation = null;
-    }
-  }
+  // Live reconciliation calculation as executor types
+  const parsedSiiGross = parseInt(siiInput.replace(/\D/g, ""), 10);
+  const liveReconciliation: ReconciliationResult | null =
+    requestData && !isNaN(parsedSiiGross) && parsedSiiGross > 0
+      ? calculateReconciliation(requestData.expectedGrossTotal, parsedSiiGross)
+      : null;
 
+  // Save Reconciliation Handler
   const handleSaveReconciliation = async () => {
-    if (!requestData || isNaN(parsedSiiTotal) || parsedSiiTotal <= 0) {
-      setReconciliationError("Ingresa un monto válido mayor a 0.");
+    if (!liveReconciliation) {
+      setReconciliationError("Ingresa un monto bruto válido en pesos chilenos.");
       return;
     }
 
     setReconciliationError(null);
     setReconciling(true);
+
     try {
       const res = await fetch(`/api/v1/invoice-requests/${requestId}/reconcile`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ siiGrossTotal: parsedSiiTotal }),
+        body: JSON.stringify({ siiGrossTotal: liveReconciliation.siiGrossTotal }),
       });
       const data = await res.json();
 
-      if (res.ok && data.success && data.data) {
-        setRequestData(data.data.request);
+      if (res.ok && data.success && data.data?.reconciliation) {
         setReconciliationSaved(data.data.reconciliation);
       } else {
-        setReconciliationError(data.error?.message || "Error al registrar la cuadratura.");
+        setReconciliationError(data.error?.message || "No se pudo guardar la cuadratura.");
       }
     } catch {
-      setReconciliationError("Error de conexi?n al guardar la cuadratura.");
+      setReconciliationError("Error de conexión al guardar la cuadratura.");
     } finally {
       setReconciling(false);
     }
   };
 
   // PDF Upload Handler
-  const handleFileUpload = async (file: File) => {
+  const handleFileUpload = async (file: File, docNumber: number = 1) => {
     if (!file) return;
     setUploadError(null);
+    setUploadErrorsByDoc((prev) => ({ ...prev, [docNumber]: "" }));
 
     if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
-      setUploadError("El archivo debe ser un documento en formato PDF (.pdf).");
+      const err = "El archivo debe ser un documento en formato PDF (.pdf).";
+      setUploadError(err);
+      setUploadErrorsByDoc((prev) => ({ ...prev, [docNumber]: err }));
       return;
     }
 
     if (file.size > 2 * 1024 * 1024) {
-      setUploadError("El archivo supera el tamaño máximo permitido de 2 MB.");
+      const err = "El archivo supera el tamaño máximo permitido de 2 MB.";
+      setUploadError(err);
+      setUploadErrorsByDoc((prev) => ({ ...prev, [docNumber]: err }));
       return;
     }
 
     const formData = new FormData();
     formData.append("file", file);
+    formData.append("documentNumber", docNumber.toString());
 
     setUploadingPdf(true);
+    setUploadingDocNumber(docNumber);
+
     try {
       const res = await fetch(`/api/v1/invoice-requests/${requestId}/document`, {
         method: "POST",
@@ -205,22 +208,41 @@ ${itemsText}`;
       const data = await res.json();
 
       if (res.ok && data.success && data.data?.document) {
-        setUploadedDocument(data.data.document);
+        const newDoc: SanitizedDocument = data.data.document;
+        setUploadedDocument(newDoc);
+        setRequestData((prev) => {
+          if (!prev) return prev;
+          const prevDocs = prev.documents || (prev.document ? [prev.document] : []);
+          const filtered = prevDocs.filter((d) => (d.documentNumber || 1) !== docNumber);
+          const updatedDocs = [...filtered, newDoc].sort(
+            (a, b) => (a.documentNumber || 1) - (b.documentNumber || 1)
+          );
+          return {
+            ...prev,
+            documents: updatedDocs,
+            document: updatedDocs[0] || newDoc,
+          };
+        });
       } else {
-        setUploadError(data.error?.message || "No pudimos subir la factura. Intenta nuevamente.");
+        const err = data.error?.message || "No pudimos subir la factura. Intenta nuevamente.";
+        setUploadError(err);
+        setUploadErrorsByDoc((prev) => ({ ...prev, [docNumber]: err }));
       }
     } catch {
-      setUploadError("Error de conexión al subir la factura.");
+      const err = "Error de conexión al subir la factura.";
+      setUploadError(err);
+      setUploadErrorsByDoc((prev) => ({ ...prev, [docNumber]: err }));
     } finally {
       setUploadingPdf(false);
+      setUploadingDocNumber(null);
     }
   };
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = (e: React.DragEvent, docNumber: number = 1) => {
     e.preventDefault();
     setIsDragOver(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleFileUpload(e.dataTransfer.files[0]);
+      handleFileUpload(e.dataTransfer.files[0], docNumber);
     }
   };
 
@@ -308,7 +330,16 @@ ${itemsText}`;
   const isReconciliationValid =
     activeReconciliation &&
     (activeReconciliation.status === "MATCH" || activeReconciliation.status === "ROUNDING_ACCEPTED");
-  const canFinalize = Boolean(uploadedDocument && !isCompleted);
+
+  const splitBlocks = requestData
+    ? splitRequestItemsIntoDocuments(
+        requestData.items || [],
+        requestData.documents || (uploadedDocument ? [uploadedDocument] : requestData.document ? [requestData.document] : [])
+      )
+    : [];
+  const isSplit = splitBlocks.length > 1;
+  const uploadedDocsCount = splitBlocks.filter((b) => b.document).length;
+  const canFinalize = splitBlocks.length > 0 && uploadedDocsCount === splitBlocks.length && !isCompleted;
 
   return (
     <div className="min-h-screen bg-slate-50 py-6 px-4 sm:px-6 lg:px-8">
@@ -345,7 +376,11 @@ ${itemsText}`;
           <div className="bg-emerald-50 border-2 border-emerald-400 rounded-2xl p-6 text-emerald-950 space-y-3 shadow-sm">
             <div className="flex items-center gap-2 text-emerald-800 font-extrabold text-base">
               <span>✓</span>
-              <span>Factura finalizada exitosamente</span>
+              <span>
+                {isSplit
+                  ? `Facturación dividida finalizada exitosamente (${splitBlocks.length} documentos)`
+                  : "Factura finalizada exitosamente"}
+              </span>
             </div>
             <div className="text-xs text-emerald-900 grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
@@ -363,7 +398,7 @@ ${itemsText}`;
             </div>
             <div className="pt-2 flex items-center justify-between border-t border-emerald-200">
               <span className="text-[11px] text-emerald-800">
-                Estado: COMPLETED | Documento de factura resguardado en almacenamiento inmutable.
+                Estado: COMPLETED | {splitBlocks.length} documento(s) tributario(s) resguardado(s) en almacenamiento inmutable.
               </span>
               <Link
                 href="/gestion"
@@ -371,6 +406,32 @@ ${itemsText}`;
               >
                 Volver a la cola de trabajo →
               </Link>
+            </div>
+          </div>
+        )}
+
+        {/* Informative Split Invoicing Top Banner */}
+        {isSplit && (
+          <div className="p-4 bg-indigo-50 border-2 border-indigo-200 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+            <div className="flex items-center gap-3">
+              <div className="h-9 w-9 bg-indigo-600 text-white rounded-xl flex items-center justify-center font-bold text-sm shadow-sm">
+                ✂️
+              </div>
+              <div>
+                <h3 className="text-sm font-extrabold text-indigo-950">
+                  Facturación Dividida — {splitBlocks.length} Documentos Tributarios Requeridos
+                </h3>
+                <p className="text-xs text-indigo-800">
+                  Esta solicitud contiene <strong>{requestData.items?.length} productos</strong>. Por el límite de 10 líneas del SII, debes emitir <strong>{splitBlocks.length} facturas</strong> y cargar sus respectivos PDFs.
+                </p>
+              </div>
+            </div>
+            <div className="text-xs font-bold text-indigo-900 bg-white/90 px-3 py-1.5 rounded-lg border border-indigo-200 shrink-0">
+              {uploadedDocsCount === splitBlocks.length ? (
+                <span className="text-emerald-700">✓ {uploadedDocsCount}/{splitBlocks.length} PDFs listos</span>
+              ) : (
+                <span>{uploadedDocsCount}/{splitBlocks.length} PDFs cargados</span>
+              )}
             </div>
           </div>
         )}
@@ -399,7 +460,7 @@ ${itemsText}`;
                   Solicitud: <span className="font-mono text-blue-700">{requestData.requestNumber}</span>
                 </span>
                 <span className="text-xs text-slate-500">
-                  Bodega: <strong className="text-slate-800">{requestData.warehouseId ? "Santiago Central" : "Norte"}</strong>
+                  Bodega: <strong className="text-slate-800">{requestData.warehouse?.name || "Santiago Central"}</strong>
                 </span>
               </div>
 
@@ -458,83 +519,201 @@ ${itemsText}`;
             </div>
           </div>
 
-          {/* Bloque 2: Productos y Precios Netos */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
-                2. Productos para ingresar en el SII
-              </h2>
-              <span className="text-xs text-slate-500">Copia cada dato individual para el formulario del SII</span>
-            </div>
+          {/* Bloque 2: Productos y Precios Netos (Separados por Bloque si isSplit) */}
+          <div className="space-y-6">
+            {splitBlocks.map((block) => {
+              const isBlockDocUploaded = Boolean(block.document);
+              const isUploadingThis = uploadingPdf && uploadingDocNumber === block.documentNumber;
+              const blockError = uploadErrorsByDoc[block.documentNumber];
 
-            <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 text-slate-600 font-semibold uppercase border-b border-slate-200">
-                  <tr>
-                    <th className="py-3 px-4">#</th>
-                    <th className="py-3 px-4">Descripción del producto</th>
-                    <th className="py-3 px-4 text-center">Cant.</th>
-                    <th className="py-3 px-4 text-right">Precio Solicitado (IVA incl.)</th>
-                    <th className="py-3 px-4 text-right bg-blue-50/70 text-blue-950 font-bold">
-                      Precio Neto para SII
-                    </th>
-                    <th className="py-3 px-4 text-right">Total producto</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200 bg-white">
-                  {requestData.items?.map((item) => (
-                    <tr key={item.id} className="hover:bg-slate-50">
-                      <td className="py-3 px-4 text-slate-400 font-mono">{item.lineNumber}</td>
-                      <td className="py-3 px-4 font-semibold text-slate-900">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="line-clamp-2">{item.description}</span>
-                          <button
-                            type="button"
-                            onClick={() => copyToClipboard(item.description, `Producto`)}
-                            className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-medium text-xs transition border border-slate-300 shrink-0"
-                            title="Copiar descripción del producto"
-                          >
-                            Copiar
-                          </button>
+              return (
+                <div
+                  key={block.documentNumber}
+                  className={`rounded-2xl border ${
+                    isSplit ? "border-indigo-200 bg-indigo-50/20 p-5 space-y-4" : "border-slate-200 p-0 space-y-4"
+                  }`}
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-sm font-bold text-slate-900">
+                        {isSplit
+                          ? `Documento ${block.documentNumber} de ${block.totalDocuments} (Factura SII)`
+                          : "2. Productos para ingresar en el SII"}
+                      </h2>
+                      <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md text-[11px] font-semibold">
+                        Líneas {block.startLine}–{block.endLine} ({block.itemCount} {block.itemCount === 1 ? "ítem" : "ítems"})
+                      </span>
+                    </div>
+
+                    <div className="text-xs text-slate-600 flex items-center gap-3">
+                      <span>
+                        Neto SII: <strong className="font-mono text-blue-900">{formatCLP(block.expectedNetTotal)}</strong>
+                      </span>
+                      <span>
+                        Total Bruto: <strong className="font-mono text-slate-900">{formatCLP(block.expectedGrossTotal)}</strong>
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Tabla de Productos de este Bloque */}
+                  <div className="border border-slate-200 rounded-xl overflow-hidden shadow-xs bg-white">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-50 text-slate-600 font-semibold uppercase border-b border-slate-200">
+                        <tr>
+                          <th className="py-2.5 px-3">#</th>
+                          <th className="py-2.5 px-3">Descripción del producto</th>
+                          <th className="py-2.5 px-3 text-center">Cant.</th>
+                          <th className="py-2.5 px-3 text-right">Precio Solicitado</th>
+                          <th className="py-2.5 px-3 text-right bg-blue-50/70 text-blue-950 font-bold">
+                            Precio Neto para SII
+                          </th>
+                          <th className="py-2.5 px-3 text-right">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {block.items.map((item) => (
+                          <tr key={item.id} className="hover:bg-slate-50">
+                            <td className="py-2.5 px-3 text-slate-400 font-mono">{item.lineNumber}</td>
+                            <td className="py-2.5 px-3 font-semibold text-slate-900">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="line-clamp-2">{item.description}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => copyToClipboard(item.description, `Producto`)}
+                                  className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-medium text-[11px] transition border border-slate-300 shrink-0"
+                                  title="Copiar descripción"
+                                >
+                                  Copiar
+                                </button>
+                              </div>
+                            </td>
+                            <td className="py-2.5 px-3 text-center font-bold text-slate-800">
+                              <div className="flex items-center justify-center gap-1">
+                                <span>{item.quantity}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => copyToClipboard(item.quantity.toString(), `Cantidad`)}
+                                  className="px-1.5 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-medium text-[10px] transition border border-slate-300"
+                                  title="Copiar cantidad"
+                                >
+                                  Copiar
+                                </button>
+                              </div>
+                            </td>
+                            <td className="py-2.5 px-3 text-right text-slate-600">{formatCLP(item.unitPriceGross)}</td>
+                            <td className="py-2.5 px-3 text-right bg-blue-50/40">
+                              <div className="flex items-center justify-end gap-2">
+                                <span className="font-mono font-extrabold text-blue-900 text-xs">
+                                  {formatCLP(item.unitPriceNet)}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => copyToClipboard(item.unitPriceNet.toString(), "Precio neto")}
+                                  className="px-2 py-0.5 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold text-[11px] transition shadow-xs"
+                                  title="Copiar precio neto para SII"
+                                >
+                                  Copiar
+                                </button>
+                              </div>
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-bold text-slate-900">{formatCLP(item.lineTotalGross)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Carga de Documento PDF para este bloque */}
+                  <div className="pt-2">
+                    <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                      {isSplit ? `PDF Factura #${block.documentNumber}` : "4. Factura emitida en SII (PDF)"}
+                    </h3>
+
+                    {isBlockDocUploaded && block.document ? (
+                      <div className="p-4 bg-emerald-50/70 border-2 border-emerald-300 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="h-8 w-8 bg-emerald-600 text-white rounded-lg flex items-center justify-center font-bold text-sm shadow-xs">
+                            📄
+                          </div>
+                          <div>
+                            <span className="text-xs font-bold text-emerald-950 block">{block.document.fileName}</span>
+                            <span className="text-[11px] text-emerald-700">
+                              {(block.document.fileSize / 1024).toFixed(1)} KB | Documento #{block.documentNumber} cargado
+                            </span>
+                          </div>
                         </div>
-                      </td>
-                      <td className="py-3 px-4 text-center font-bold text-slate-800">
-                        <div className="flex items-center justify-center gap-1.5">
-                          <span>{item.quantity}</span>
-                          <button
-                            type="button"
-                            onClick={() => copyToClipboard(item.quantity.toString(), `Cantidad`)}
-                            className="px-1.5 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-medium text-[11px] transition border border-slate-300"
-                            title="Copiar cantidad"
-                          >
-                            Copiar
-                          </button>
+
+                        <div className="flex items-center gap-2">
+                          {block.document.accessUrl && (
+                            <a
+                              href={block.document.accessUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="py-1.5 px-3 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-lg text-xs font-semibold transition"
+                            >
+                              Ver PDF ↗
+                            </a>
+                          )}
+
+                          {!isCompleted && (
+                            <label className="py-1.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition border border-slate-300 cursor-pointer">
+                              {isUploadingThis ? "Subiendo..." : "Reemplazar"}
+                              <input
+                                type="file"
+                                accept="application/pdf,.pdf"
+                                onChange={(e) => {
+                                  if (e.target.files && e.target.files.length > 0) {
+                                    handleFileUpload(e.target.files[0], block.documentNumber);
+                                  }
+                                }}
+                                disabled={uploadingPdf}
+                                className="hidden"
+                              />
+                            </label>
+                          )}
                         </div>
-                      </td>
-                      <td className="py-3 px-4 text-right text-slate-600">{formatCLP(item.unitPriceGross)}</td>
-                      <td className="py-3 px-4 text-right bg-blue-50/40">
-                        <div className="flex items-center justify-end gap-2">
-                          <span className="font-mono font-extrabold text-blue-900 text-sm">
-                            {formatCLP(item.unitPriceNet)}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              copyToClipboard(item.unitPriceNet.toString(), "Precio neto")
-                            }
-                            className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold text-xs transition shadow-sm"
-                            title="Copiar precio neto para SII"
-                          >
-                            Copiar
-                          </button>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 text-right font-bold text-slate-900">{formatCLP(item.lineTotalGross)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                      </div>
+                    ) : (
+                      <div
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          setIsDragOver(true);
+                        }}
+                        onDragLeave={() => setIsDragOver(false)}
+                        onDrop={(e) => handleDrop(e, block.documentNumber)}
+                        className="border-2 border-dashed border-slate-300 hover:border-slate-400 bg-white rounded-xl p-5 text-center transition"
+                      >
+                        <p className="text-xs font-bold text-slate-800 mb-1">
+                          {isSplit
+                            ? `Cargar Factura SII Documento #${block.documentNumber} (Líneas ${block.startLine}–${block.endLine})`
+                            : "Arrastra aquí el PDF de la factura emitida en el SII o selecciónalo"}
+                        </p>
+                        <p className="text-[11px] text-slate-500 mb-3">Formato PDF, máx 2 MB.</p>
+
+                        <label className="inline-block py-2 px-4 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg shadow-xs transition cursor-pointer">
+                          {isUploadingThis ? "Subiendo archivo..." : `Seleccionar PDF Documento #${block.documentNumber}`}
+                          <input
+                            type="file"
+                            accept="application/pdf,.pdf"
+                            onChange={(e) => {
+                              if (e.target.files && e.target.files.length > 0) {
+                                handleFileUpload(e.target.files[0], block.documentNumber);
+                              }
+                            }}
+                            disabled={uploadingPdf}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+                    )}
+
+                    {blockError && (
+                      <p className="mt-1.5 text-xs font-semibold text-rose-600">{blockError}</p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
           {/* Bloque 3: Total esperado y Cuadratura SII */}
@@ -543,12 +722,22 @@ ${itemsText}`;
             <div className="bg-slate-900 text-white rounded-2xl p-6 flex flex-col justify-between shadow-sm">
               <div>
                 <p className="text-xs uppercase text-slate-400 font-bold tracking-wider">
-                  TOTAL QUE DEBE DAR EN SII
+                  TOTAL CONSOLIDADO A FACTURAR
                 </p>
                 <p className="text-4xl font-extrabold text-emerald-400 my-2">
                   {formatCLP(requestData.expectedGrossTotal)}
                 </p>
-                <p className="text-xs text-slate-400">Todos los precios solicitados incluyen IVA (19%).</p>
+                {isSplit && (
+                  <div className="text-xs text-slate-300 space-y-1 font-mono pt-1">
+                    {splitBlocks.map((b) => (
+                      <div key={b.documentNumber} className="flex justify-between">
+                        <span>• Factura #{b.documentNumber}:</span>
+                        <span>{formatCLP(b.expectedGrossTotal)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <p className="text-xs text-slate-400 mt-2">Todos los precios solicitados incluyen IVA (19%).</p>
               </div>
 
               {requestData.notes && (
@@ -573,7 +762,7 @@ ${itemsText}`;
                   </span>
                 </div>
                 <p className="text-xs text-slate-500 mt-1">
-                  Opcionalmente introduce el total generado en el SII para verificar que los precios netos coinciden.
+                  Introduce el total consolidado generado en el SII para verificar que los precios netos coinciden.
                 </p>
               </div>
 
@@ -653,116 +842,6 @@ ${itemsText}`;
             </div>
           </div>
 
-          {/* Bloque 4: Carga de Documento PDF */}
-          <div>
-            <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-3">
-              4. Factura emitida en SII (PDF)
-            </h2>
-
-            {/* Document upload zone or preview card */}
-            {uploadedDocument ? (
-              <div className="p-5 bg-emerald-50/60 border-2 border-emerald-300 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 bg-emerald-600 text-white rounded-xl flex items-center justify-center font-bold text-lg shadow-sm">
-                    📄
-                  </div>
-                  <div>
-                    <span className="text-xs font-bold text-emerald-950 block">{uploadedDocument.fileName}</span>
-                    <span className="text-[11px] text-emerald-700">
-                      {(uploadedDocument.fileSize / 1024).toFixed(1)} KB | Cargado exitosamente
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  {uploadedDocument.accessUrl && (
-                    <a
-                      href={uploadedDocument.accessUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="py-1.5 px-3 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-lg text-xs font-semibold transition"
-                    >
-                      Ver PDF ↗
-                    </a>
-                  )}
-
-                  {!isCompleted && (
-                    <>
-                      <input
-                        type="file"
-                        ref={fileInputRef}
-                        accept="application/pdf,.pdf"
-                        onChange={(e) => {
-                          if (e.target.files && e.target.files.length > 0) {
-                            handleFileUpload(e.target.files[0]);
-                          }
-                        }}
-                        className="hidden"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={uploadingPdf}
-                        className="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition border border-slate-300 disabled:opacity-50"
-                      >
-                        {uploadingPdf ? "Subiendo..." : "Reemplazar"}
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div>
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  accept="application/pdf,.pdf"
-                  onChange={(e) => {
-                    if (e.target.files && e.target.files.length > 0) {
-                      handleFileUpload(e.target.files[0]);
-                    }
-                  }}
-                  className="hidden"
-                />
-
-                <div
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    setIsDragOver(true);
-                  }}
-                  onDragLeave={() => setIsDragOver(false)}
-                  onDrop={handleDrop}
-                  className={`border-2 border-dashed rounded-2xl p-8 text-center transition ${
-                    isDragOver
-                      ? "border-blue-500 bg-blue-50/50"
-                      : "border-slate-300 hover:border-slate-400 bg-slate-50/50"
-                  }`}
-                >
-                  <div className="w-12 h-12 mx-auto mb-3 rounded-2xl bg-blue-100 text-blue-700 flex items-center justify-center text-xl">
-                    📄
-                  </div>
-                  <h3 className="text-sm font-bold text-slate-800">Factura generada en el SII</h3>
-                  <p className="text-xs text-slate-500 mt-1 mb-4">
-                    Arrastra aquí el PDF de la factura emitida o selecciónalo desde tu computador (Máx. 2 MB).
-                  </p>
-
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={uploadingPdf}
-                    className="py-2.5 px-5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-sm transition disabled:opacity-50"
-                  >
-                    {uploadingPdf ? "Subiendo archivo..." : "Seleccionar archivo PDF"}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {uploadError && (
-              <p className="mt-2 text-xs font-semibold text-rose-600">{uploadError}</p>
-            )}
-          </div>
-
           {/* Bloque 5: Finalización Transaccional */}
           {!isCompleted && (
             <div className="p-6 bg-slate-900 text-white rounded-2xl space-y-4">
@@ -770,7 +849,9 @@ ${itemsText}`;
                 <div>
                   <h3 className="text-base font-extrabold text-white">Todo listo para finalizar</h3>
                   <p className="text-xs text-slate-300 mt-0.5">
-                    Verifica que la cuadratura y el documento PDF sean correctos antes de completar la solicitud.
+                    {isSplit
+                      ? `Verifica que los ${splitBlocks.length} PDFs de las facturas estén cargados correctamente antes de finalizar.`
+                      : "Verifica que la cuadratura y el documento PDF sean correctos antes de completar la solicitud."}
                   </p>
                 </div>
 
@@ -780,7 +861,7 @@ ${itemsText}`;
                   disabled={!canFinalize || finalizing}
                   className="py-3 px-6 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-extrabold text-sm rounded-xl shadow-lg transition disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  {finalizing ? "Finalizando factura..." : "✓ Finalizar factura"}
+                  {finalizing ? "Finalizando factura..." : "✓ Finalizar facturación"}
                 </button>
               </div>
 
@@ -803,14 +884,20 @@ ${itemsText}`;
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className={uploadedDocument ? "text-emerald-400 font-bold" : "text-amber-400 font-bold"}>
-                    {uploadedDocument ? "✓" : "○"}
+                  <span className={uploadedDocsCount === splitBlocks.length ? "text-emerald-400 font-bold" : "text-amber-400 font-bold"}>
+                    {uploadedDocsCount === splitBlocks.length ? "✓" : "○"}
                   </span>
-                  <span className={uploadedDocument ? "text-slate-300" : "text-amber-300"}>
-                    Factura: {uploadedDocument ? "PDF cargado" : "Pendiente"}
+                  <span className={uploadedDocsCount === splitBlocks.length ? "text-slate-300" : "text-amber-300 font-bold"}>
+                    PDFs: {uploadedDocsCount} / {splitBlocks.length} listos
                   </span>
                 </div>
               </div>
+
+              {uploadedDocsCount < splitBlocks.length && (
+                <div className="p-3 bg-amber-950/60 border border-amber-600/70 rounded-xl text-xs text-amber-200">
+                  ℹ️ <strong>Carga pendiente:</strong> Debes subir los PDFs de los <strong>{splitBlocks.length} documentos</strong> ({uploadedDocsCount} cargados) para habilitar la finalización.
+                </div>
+              )}
 
               {finalizeError && (
                 <div className="p-3 bg-rose-950/80 border border-rose-600 rounded-xl text-xs text-rose-200">

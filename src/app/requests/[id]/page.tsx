@@ -44,11 +44,13 @@ export default function ViewInvoiceRequestPage() {
   const [isMsgCopied, setIsMsgCopied] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [copiedDocLinkId, setCopiedDocLinkId] = useState<string | null>(null);
 
-  const getOrFetchShareUrl = async (): Promise<string | null> => {
-    if (!requestData?.document?.id) return null;
+  const getOrFetchShareUrl = async (docId?: string): Promise<string | null> => {
+    const targetDocId = docId || requestData?.document?.id;
+    if (!targetDocId) return null;
     try {
-      const res = await fetch(`/api/v1/documents/${requestData.document.id}/share`, {
+      const res = await fetch(`/api/v1/documents/${targetDocId}/share`, {
         method: "POST",
       });
       const data = await res.json();
@@ -61,13 +63,19 @@ export default function ViewInvoiceRequestPage() {
     return null;
   };
 
-  const handleCopyShareLink = async () => {
+  const handleCopyShareLink = async (docId?: string) => {
     setIsSharing(true);
-    const shareUrl = await getOrFetchShareUrl();
+    const targetDocId = docId || requestData?.document?.id;
+    const shareUrl = await getOrFetchShareUrl(targetDocId);
     if (shareUrl) {
       await navigator.clipboard.writeText(shareUrl);
-      setIsLinkCopied(true);
-      setTimeout(() => setIsLinkCopied(false), 3000);
+      if (docId) {
+        setCopiedDocLinkId(docId);
+        setTimeout(() => setCopiedDocLinkId(null), 3000);
+      } else {
+        setIsLinkCopied(true);
+        setTimeout(() => setIsLinkCopied(false), 3000);
+      }
     }
     setIsSharing(false);
   };
@@ -75,17 +83,38 @@ export default function ViewInvoiceRequestPage() {
   const handleCopyWhatsAppMessage = async () => {
     if (!requestData) return;
     setIsSharing(true);
-    const shareUrl = await getOrFetchShareUrl();
-    if (shareUrl) {
-      const msg = formatWhatsAppInvoiceMessage(
-        requestData.customerLegalNameSnapshot,
-        shareUrl
-      );
-      await navigator.clipboard.writeText(msg);
-      setIsMsgCopied(true);
-      setTimeout(() => setIsMsgCopied(false), 3000);
+    try {
+      const docs = requestData.documents || (requestData.document ? [requestData.document] : []);
+      if (docs.length > 1) {
+        const shareUrlsPromises = docs.map(async (d, idx) => {
+          const url = await getOrFetchShareUrl(d.id);
+          return { documentNumber: d.documentNumber || idx + 1, url: url || "" };
+        });
+        const shareUrls = await Promise.all(shareUrlsPromises);
+        const msg = formatWhatsAppInvoiceMessage(
+          requestData.customerLegalNameSnapshot,
+          shareUrls
+        );
+        await navigator.clipboard.writeText(msg);
+        setIsMsgCopied(true);
+        setTimeout(() => setIsMsgCopied(false), 3000);
+      } else if (docs.length === 1) {
+        const shareUrl = await getOrFetchShareUrl(docs[0].id);
+        if (shareUrl) {
+          const msg = formatWhatsAppInvoiceMessage(
+            requestData.customerLegalNameSnapshot,
+            shareUrl
+          );
+          await navigator.clipboard.writeText(msg);
+          setIsMsgCopied(true);
+          setTimeout(() => setIsMsgCopied(false), 3000);
+        }
+      }
+    } catch (err) {
+      console.error("Error al copiar mensaje WhatsApp:", err);
+    } finally {
+      setIsSharing(false);
     }
-    setIsSharing(false);
   };
 
   useEffect(() => {
@@ -290,7 +319,83 @@ export default function ViewInvoiceRequestPage() {
               Esta factura fue emitida por el equipo de facturación. Puedes visualizar o descargar el PDF oficial.
             </p>
 
-            {requestData.document && (
+            {requestData.documents && requestData.documents.length > 1 ? (
+              <div className="space-y-3 pt-1">
+                <div className="space-y-2">
+                  {requestData.documents.map((doc, idx) => (
+                    <div
+                      key={doc.id}
+                      className="p-3.5 bg-white rounded-xl border border-emerald-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <span className="h-7 w-7 bg-emerald-100 text-emerald-800 rounded-lg flex items-center justify-center font-bold text-xs shrink-0">
+                          #{doc.documentNumber || idx + 1}
+                        </span>
+                        <div>
+                          <span className="font-bold text-slate-900 block">
+                            Factura Documento #{doc.documentNumber || idx + 1}
+                          </span>
+                          <span className="text-[11px] text-slate-500">
+                            {(doc.fileSize / 1024).toFixed(1)} KB | {doc.fileName}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {doc.accessUrl ? (
+                          <a
+                            href={doc.accessUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="py-1.5 px-3 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-lg transition text-xs shadow-xs"
+                          >
+                            Ver PDF ↗
+                          </a>
+                        ) : (
+                          <a
+                            href={`/api/v1/documents/${doc.id}/access?stream=true`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="py-1.5 px-3 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-lg transition text-xs shadow-xs"
+                          >
+                            Ver PDF ↗
+                          </a>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => handleCopyShareLink(doc.id)}
+                          disabled={isSharing}
+                          className={`py-1.5 px-3 font-bold rounded-lg transition text-xs border ${
+                            copiedDocLinkId === doc.id
+                              ? "bg-emerald-600 text-white border-emerald-600"
+                              : "bg-white hover:bg-slate-50 text-slate-700 border-slate-300"
+                          }`}
+                        >
+                          {copiedDocLinkId === doc.id ? "✓ Copiado" : "Copiar enlace"}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={handleCopyWhatsAppMessage}
+                    disabled={isSharing}
+                    className={`inline-flex items-center justify-center gap-2 py-2.5 px-4 text-xs font-bold rounded-xl transition shadow-sm ${
+                      isMsgCopied
+                        ? "bg-emerald-600 text-white"
+                        : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                    }`}
+                  >
+                    <span>💬</span>
+                    <span>{isMsgCopied ? "✓ Mensaje copiado" : isSharing ? "Generando..." : "Copiar mensaje consolidado WhatsApp"}</span>
+                  </button>
+                </div>
+              </div>
+            ) : requestData.document ? (
               <div className="pt-1 flex flex-col sm:flex-row gap-3">
                 {requestData.document.accessUrl && (
                   <a
@@ -306,7 +411,7 @@ export default function ViewInvoiceRequestPage() {
 
                 <button
                   type="button"
-                  onClick={handleCopyShareLink}
+                  onClick={() => handleCopyShareLink()}
                   disabled={isSharing}
                   className={`inline-flex items-center justify-center gap-2 py-2.5 px-4 text-xs font-bold rounded-xl transition shadow-sm ${
                     isLinkCopied
@@ -332,7 +437,7 @@ export default function ViewInvoiceRequestPage() {
                   <span>{isMsgCopied ? "✓ Mensaje copiado" : isSharing ? "Generando..." : "Copiar mensaje WhatsApp"}</span>
                 </button>
               </div>
-            )}
+            ) : null}
           </div>
         )}
 

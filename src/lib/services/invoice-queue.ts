@@ -17,6 +17,8 @@ import {
 import {
   calculateRequestTotals,
   calculateReconciliation,
+  calculateRequiredDocuments,
+  MAX_ITEMS_PER_DOCUMENT,
   ReconciliationResult,
 } from "@/domain/pricing";
 import { formatRut, normalizeRut, validateRut } from "@/lib/validation/rut";
@@ -740,6 +742,10 @@ export function sanitizeQueueInvoiceRequest(
     resolvedAt: c.resolvedAt ? c.resolvedAt.toISOString() : null,
   }));
 
+  const itemCount = sanitizedItems.length;
+  const requiredDocuments = calculateRequiredDocuments(itemCount);
+  const isSplit = itemCount > MAX_ITEMS_PER_DOCUMENT;
+
   return {
     id: r.id,
     requestNumber: r.requestNumber,
@@ -770,5 +776,7 @@ export function sanitizeQueueInvoiceRequest(
     age: computeAgeIndicator(r.createdAt),
     items: sanitizedItems,
     corrections: sanitizedCorrections,
+    requiredDocuments,
+    isSplit,
   };
 }
