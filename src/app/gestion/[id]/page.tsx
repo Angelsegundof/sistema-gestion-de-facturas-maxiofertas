@@ -76,16 +76,27 @@ export default function WorktablePage() {
     async function fetchData() {
       try {
         const [meRes, reqRes] = await Promise.all([
-          fetch("/api/v1/auth/me"),
+          fetch("/api/v1/auth/session"),
           fetch(`/api/v1/invoice-requests/${requestId}`),
         ]);
 
-        const meData = await meRes.json();
-        const reqData = await reqRes.json();
-
-        if (meData.success && meData.data?.user) {
-          setCurrentUser(meData.data.user);
+        if (meRes.ok) {
+          const meData = await meRes.json();
+          if (meData.success && meData.data?.user) {
+            setCurrentUser(meData.data.user);
+          }
         }
+
+        if (!reqRes.ok) {
+          const errorJson = await reqRes.json().catch(() => null);
+          setError(
+            errorJson?.error?.message ||
+              `Error del servidor (${reqRes.status}): No se pudo cargar la solicitud.`
+          );
+          return;
+        }
+
+        const reqData = await reqRes.json();
 
         if (reqData.success && reqData.data?.request) {
           const req: SanitizedInvoiceRequest = reqData.data.request;
@@ -108,7 +119,8 @@ export default function WorktablePage() {
         } else {
           setError(reqData.error?.message || "No se pudo cargar la información de la solicitud.");
         }
-      } catch {
+      } catch (err) {
+        console.error("fetchData error:", err);
         setError("Error de red al conectar con el servidor.");
       } finally {
         setLoading(false);
