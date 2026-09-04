@@ -85,6 +85,7 @@ export async function runLocalMigrations(pgInstance: PGlite): Promise<void> {
     "0006_shallow_skaar.sql",
     "0007_document_share_tokens.sql",
     "0008_split_invoices_document_number.sql",
+    "0009_customer_delivery_status.sql",
   ];
 
   for (const mFile of migrationFiles) {

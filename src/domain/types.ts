@@ -33,6 +33,14 @@ export type Permission =
   | "CUSTOMER_CREATE"
   | "CUSTOMER_MANAGE";
 
+export type CustomerDeliveryStatus = "PENDING" | "SENT" | "LEGACY";
+
+export const customerDeliveryStatuses: CustomerDeliveryStatus[] = [
+  "PENDING",
+  "SENT",
+  "LEGACY",
+];
+
 export type InvoiceRequestStatus =
   | "PENDING"
   | "IN_PROGRESS"
@@ -216,6 +224,10 @@ export interface SanitizedInvoiceRequest {
   assignedAt: string | null;
   completedAt: string | null;
   updatedAt: string;
+  customerDeliveryStatus?: CustomerDeliveryStatus | null;
+  customerSentAt?: string | null;
+  customerSentBy?: string | null;
+  customerSentByName?: string | null;
   age?: AgeIndicator;
   items?: SanitizedInvoiceRequestItem[];
   corrections?: SanitizedRequestCorrection[];

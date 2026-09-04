@@ -7,7 +7,29 @@ import { formatWhatsAppInvoiceMessage } from "@/domain/whatsapp";
 import { formatCLP } from "@/domain/pricing";
 import EditPendingRequestModal from "@/components/EditPendingRequestModal";
 
-type RequesterStatusTab = "ALL" | "PENDING" | "NEEDS_CORRECTION" | "IN_PROGRESS" | "COMPLETED";
+type RequesterStatusTab =
+  | "ALL"
+  | "PENDING"
+  | "NEEDS_CORRECTION"
+  | "IN_PROGRESS"
+  | "COMPLETED"
+  | "PENDING_DELIVERY"
+  | "SENT_TO_CUSTOMER";
+
+function formatShortDateTime(isoString?: string | null): string {
+  if (!isoString) return "";
+  try {
+    const d = new Date(isoString);
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const year = d.getFullYear();
+    const hours = String(d.getHours()).padStart(2, "0");
+    const mins = String(d.getMinutes()).padStart(2, "0");
+    return `${day}/${month}/${year} ${hours}:${mins}`;
+  } catch {
+    return isoString;
+  }
+}
 
 export default function RequesterInvoiceList() {
   const [requests, setRequests] = useState<SanitizedInvoiceRequest[]>([]);
@@ -21,6 +43,12 @@ export default function RequesterInvoiceList() {
   const [contactModalReq, setContactModalReq] = useState<SanitizedInvoiceRequest | null>(null);
   const [docsModalReq, setDocsModalReq] = useState<SanitizedInvoiceRequest | null>(null);
   const [editingRequest, setEditingRequest] = useState<SanitizedInvoiceRequest | null>(null);
+  const [deliveryConfirmReq, setDeliveryConfirmReq] = useState<{
+    req: SanitizedInvoiceRequest;
+    newStatus: "SENT" | "PENDING";
+  } | null>(null);
+  const [updatingDeliveryId, setUpdatingDeliveryId] = useState<string | null>(null);
+  const [deliveryError, setDeliveryError] = useState<string | null>(null);
   const [sharingId, setSharingId] = useState<string | null>(null);
   const [refreshIndex, setRefreshIndex] = useState(0);
   const [selectedTab, setSelectedTab] = useState<RequesterStatusTab>("ALL");
@@ -117,6 +145,45 @@ export default function RequesterInvoiceList() {
     }
   };
 
+  // Update Customer Delivery Status Handler
+  const handleUpdateDeliveryStatus = async (
+    requestId: string,
+    targetStatus: "SENT" | "PENDING"
+  ) => {
+    setDeliveryError(null);
+    setUpdatingDeliveryId(requestId);
+    try {
+      const res = await fetch(`/api/v1/invoice-requests/${requestId}/delivery-status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: targetStatus }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success && data.data?.request) {
+        const updated = data.data.request;
+        setRequests((prev) =>
+          prev.map((item) =>
+            item.id === requestId
+              ? {
+                  ...item,
+                  customerDeliveryStatus: updated.customerDeliveryStatus,
+                  customerSentAt: updated.customerSentAt,
+                  customerSentBy: updated.customerSentBy,
+                }
+              : item
+          )
+        );
+        setDeliveryConfirmReq(null);
+      } else {
+        setDeliveryError(data.error?.message || "No se pudo actualizar el estado de envío.");
+      }
+    } catch {
+      setDeliveryError("Error de conexión al actualizar estado de envío.");
+    } finally {
+      setUpdatingDeliveryId(null);
+    }
+  };
+
   const getStatusInfo = (req: SanitizedInvoiceRequest) => {
     const activeRect = req.activeRectification;
 
@@ -199,6 +266,18 @@ export default function RequesterInvoiceList() {
   const completedCount = requests.filter(
     (r) => r.status === "COMPLETED" && (!r.activeRectification || r.activeRectification.status === "COMPLETED")
   ).length;
+  const pendingDeliveryCount = requests.filter(
+    (r) =>
+      r.status === "COMPLETED" &&
+      (!r.activeRectification || r.activeRectification.status === "COMPLETED") &&
+      (r.customerDeliveryStatus === "PENDING" || !r.customerDeliveryStatus)
+  ).length;
+  const sentToCustomerCount = requests.filter(
+    (r) =>
+      r.status === "COMPLETED" &&
+      (!r.activeRectification || r.activeRectification.status === "COMPLETED") &&
+      r.customerDeliveryStatus === "SENT"
+  ).length;
   const totalCount = requests.length;
 
   // Filter requests according to the selected summary tab
@@ -219,6 +298,20 @@ export default function RequesterInvoiceList() {
     if (selectedTab === "COMPLETED") {
       return req.status === "COMPLETED" && (!req.activeRectification || req.activeRectification.status === "COMPLETED");
     }
+    if (selectedTab === "PENDING_DELIVERY") {
+      return (
+        req.status === "COMPLETED" &&
+        (!req.activeRectification || req.activeRectification.status === "COMPLETED") &&
+        (req.customerDeliveryStatus === "PENDING" || !req.customerDeliveryStatus)
+      );
+    }
+    if (selectedTab === "SENT_TO_CUSTOMER") {
+      return (
+        req.status === "COMPLETED" &&
+        (!req.activeRectification || req.activeRectification.status === "COMPLETED") &&
+        req.customerDeliveryStatus === "SENT"
+      );
+    }
     return true;
   });
 
@@ -229,14 +322,14 @@ export default function RequesterInvoiceList() {
         <div>
           <h2 className="text-base font-extrabold text-slate-900">Mis Facturas y Solicitudes</h2>
           <p className="text-xs text-slate-500">
-            Consulta el estado de tus solicitudes, edita las pendientes y comparte facturas listas por WhatsApp.
+            Consulta el estado de tus solicitudes, edita las pendientes y controla la entrega de facturas al cliente.
           </p>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={handleRefresh}
             disabled={loading}
-            className="py-1.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition"
+            className="py-1.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition cursor-pointer"
           >
             ↻ Actualizar
           </button>
@@ -256,7 +349,7 @@ export default function RequesterInvoiceList() {
       )}
 
       {/* RESUMEN OPERATIVO / TARJETAS DE ESTADO INTERACTIVAS */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
         {/* Todas */}
         <button
           type="button"
@@ -352,7 +445,7 @@ export default function RequesterInvoiceList() {
         <button
           type="button"
           onClick={() => setSelectedTab(selectedTab === "COMPLETED" ? "ALL" : "COMPLETED")}
-          className={`p-3 rounded-xl border text-left transition relative cursor-pointer col-span-2 sm:col-span-1 ${
+          className={`p-3 rounded-xl border text-left transition relative cursor-pointer ${
             selectedTab === "COMPLETED"
               ? "bg-emerald-700 text-white border-emerald-700 shadow-sm ring-2 ring-emerald-700/30"
               : "bg-emerald-50/60 hover:bg-emerald-100/70 text-emerald-950 border-emerald-200/80"
@@ -366,6 +459,53 @@ export default function RequesterInvoiceList() {
             Realizadas
           </span>
           <span className="text-lg font-extrabold font-mono">{completedCount}</span>
+        </button>
+
+        {/* Por enviar (Entrega) */}
+        <button
+          type="button"
+          onClick={() => setSelectedTab(selectedTab === "PENDING_DELIVERY" ? "ALL" : "PENDING_DELIVERY")}
+          className={`p-3 rounded-xl border text-left transition relative cursor-pointer ${
+            selectedTab === "PENDING_DELIVERY"
+              ? "bg-amber-600 text-white border-amber-600 shadow-sm ring-2 ring-amber-600/30"
+              : "bg-amber-50/50 hover:bg-amber-100/70 text-amber-900 border-amber-200/80"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span
+              className={`text-[10px] font-bold uppercase tracking-wider block ${
+                selectedTab === "PENDING_DELIVERY" ? "text-amber-100" : "text-amber-700"
+              }`}
+            >
+              Por enviar
+            </span>
+            {pendingDeliveryCount > 0 && selectedTab !== "PENDING_DELIVERY" && (
+              <span className="inline-flex items-center justify-center px-1.5 py-0.2 bg-amber-600 text-white text-[10px] font-extrabold rounded-full">
+                {pendingDeliveryCount}
+              </span>
+            )}
+          </div>
+          <span className="text-lg font-extrabold font-mono">{pendingDeliveryCount}</span>
+        </button>
+
+        {/* Enviadas (Entrega) */}
+        <button
+          type="button"
+          onClick={() => setSelectedTab(selectedTab === "SENT_TO_CUSTOMER" ? "ALL" : "SENT_TO_CUSTOMER")}
+          className={`p-3 rounded-xl border text-left transition relative cursor-pointer ${
+            selectedTab === "SENT_TO_CUSTOMER"
+              ? "bg-teal-700 text-white border-teal-700 shadow-sm ring-2 ring-teal-700/30"
+              : "bg-teal-50/50 hover:bg-teal-100/70 text-teal-900 border-teal-200/80"
+          }`}
+        >
+          <span
+            className={`text-[10px] font-bold uppercase tracking-wider block ${
+              selectedTab === "SENT_TO_CUSTOMER" ? "text-teal-100" : "text-teal-700"
+            }`}
+          >
+            Enviadas
+          </span>
+          <span className="text-lg font-extrabold font-mono">{sentToCustomerCount}</span>
         </button>
       </div>
 
@@ -424,7 +564,14 @@ export default function RequesterInvoiceList() {
                 const isSharing = sharingId === req.id;
 
                 return (
-                  <tr key={req.id} className="hover:bg-slate-50/70 transition">
+                  <tr
+                    key={req.id}
+                    className={`${
+                      req.status === "COMPLETED" && req.customerDeliveryStatus === "SENT"
+                        ? "bg-emerald-50/20 hover:bg-emerald-50/40"
+                        : "hover:bg-slate-50/70"
+                    } transition`}
+                  >
                     {/* Razón Social */}
                     <td className="py-3.5 px-4">
                       <div className="font-bold text-slate-900 line-clamp-1">
@@ -442,11 +589,39 @@ export default function RequesterInvoiceList() {
 
                     {/* Estado */}
                     <td className="py-3.5 px-4">
-                      <span
-                        className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold border ${statusInfo.bg}`}
-                      >
-                        {statusInfo.label}
-                      </span>
+                      <div className="space-y-1">
+                        <span
+                          className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold border ${statusInfo.bg}`}
+                        >
+                          {statusInfo.label}
+                        </span>
+
+                        {req.status === "COMPLETED" && (
+                          <div>
+                            {req.customerDeliveryStatus === "SENT" ? (
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100/90 text-emerald-900 border border-emerald-300">
+                                  <span>✓</span>
+                                  <span>Enviada</span>
+                                </span>
+                                {req.customerSentAt && (
+                                  <span
+                                    className="text-[10px] text-slate-400 font-mono"
+                                    title={`Enviada el ${formatShortDateTime(req.customerSentAt)}`}
+                                  >
+                                    {formatShortDateTime(req.customerSentAt)}
+                                  </span>
+                                )}
+                              </div>
+                            ) : req.customerDeliveryStatus === "PENDING" || !req.customerDeliveryStatus ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-900 border border-amber-300">
+                                <span>⏳</span>
+                                <span>Por enviar</span>
+                              </span>
+                            ) : null}
+                          </div>
+                        )}
+                      </div>
                     </td>
 
                     {/* Acción */}
@@ -493,6 +668,34 @@ export default function RequesterInvoiceList() {
                           </Link>
                         ) : statusInfo.actionType === "COMPLETED" ? (
                           <>
+                            {/* Acción Marcar Enviada / Desmarcar */}
+                            {req.customerDeliveryStatus === "SENT" ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setDeliveryError(null);
+                                  setDeliveryConfirmReq({ req, newStatus: "PENDING" });
+                                }}
+                                className="py-1.5 px-2 text-slate-400 hover:text-slate-700 font-semibold rounded-lg transition text-[11px]"
+                                title="Desmarcar si aún no ha sido enviada al cliente"
+                              >
+                                Desmarcar envío
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setDeliveryError(null);
+                                  setDeliveryConfirmReq({ req, newStatus: "SENT" });
+                                }}
+                                className="py-1.5 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition text-[11px] shadow-xs flex items-center gap-1"
+                                title="Marcar que esta factura ya fue compartida/enviada al cliente"
+                              >
+                                <span>✓</span>
+                                <span>Marcar enviada</span>
+                              </button>
+                            )}
+
                             {req.documents && req.documents.length > 1 ? (
                               <>
                                 <button
@@ -923,6 +1126,101 @@ export default function RequesterInvoiceList() {
                 className="py-1.5 px-4 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl transition text-xs shadow-xs"
               >
                 Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmación de Envío al Cliente */}
+      {deliveryConfirmReq && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4 border border-slate-200">
+            <div className="flex items-center gap-3">
+              <div
+                className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0 ${
+                  deliveryConfirmReq.newStatus === "SENT"
+                    ? "bg-emerald-100 text-emerald-800"
+                    : "bg-amber-100 text-amber-800"
+                }`}
+              >
+                {deliveryConfirmReq.newStatus === "SENT" ? "✓" : "↺"}
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900">
+                  {deliveryConfirmReq.newStatus === "SENT"
+                    ? "¿Confirmas que esta factura ya fue enviada?"
+                    : "¿Desmarcar envío al cliente?"}
+                </h3>
+                <p className="text-xs text-slate-500">
+                  {deliveryConfirmReq.newStatus === "SENT"
+                    ? "Se registrará que la factura fue compartida/entregada al cliente."
+                    : "La factura volverá a aparecer como 'Por enviar'."}
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 rounded-xl p-3.5 border border-slate-200 space-y-1.5 text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Solicitud:</span>
+                <span className="font-mono font-bold text-slate-800">
+                  {deliveryConfirmReq.req.requestNumber}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Razón Social:</span>
+                <span className="font-bold text-slate-900 text-right truncate max-w-[200px]">
+                  {deliveryConfirmReq.req.customerLegalNameSnapshot}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">RUT:</span>
+                <span className="font-mono text-slate-700">
+                  {deliveryConfirmReq.req.customerRutSnapshot}
+                </span>
+              </div>
+            </div>
+
+            {deliveryError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 font-semibold">
+                {deliveryError}
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setDeliveryError(null);
+                  setDeliveryConfirmReq(null);
+                }}
+                disabled={updatingDeliveryId === deliveryConfirmReq.req.id}
+                className="py-2 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  handleUpdateDeliveryStatus(
+                    deliveryConfirmReq.req.id,
+                    deliveryConfirmReq.newStatus
+                  )
+                }
+                disabled={updatingDeliveryId === deliveryConfirmReq.req.id}
+                className={`py-2 px-4 text-xs font-bold text-white rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer ${
+                  deliveryConfirmReq.newStatus === "SENT"
+                    ? "bg-emerald-600 hover:bg-emerald-700"
+                    : "bg-slate-800 hover:bg-slate-900"
+                }`}
+              >
+                {updatingDeliveryId === deliveryConfirmReq.req.id ? (
+                  <span>Guardando...</span>
+                ) : deliveryConfirmReq.newStatus === "SENT" ? (
+                  <span>Sí, marcar como enviada</span>
+                ) : (
+                  <span>Sí, desmarcar</span>
+                )}
               </button>
             </div>
           </div>

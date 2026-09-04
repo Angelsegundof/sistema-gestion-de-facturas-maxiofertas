@@ -607,6 +607,9 @@ export function sanitizeInvoiceRequest(
     assignedAt: r.assignedAt ? r.assignedAt.toISOString() : null,
     completedAt: r.completedAt ? r.completedAt.toISOString() : null,
     updatedAt: r.updatedAt.toISOString(),
+    customerDeliveryStatus: r.customerDeliveryStatus || "PENDING",
+    customerSentAt: r.customerSentAt ? r.customerSentAt.toISOString() : null,
+    customerSentBy: r.customerSentBy || null,
     items: sanitizedItems,
   };
 }

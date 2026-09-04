@@ -45,6 +45,31 @@ export default function ViewInvoiceRequestPage() {
   const [isSharing, setIsSharing] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [copiedDocLinkId, setCopiedDocLinkId] = useState<string | null>(null);
+  const [updatingDelivery, setUpdatingDelivery] = useState(false);
+  const [deliveryError, setDeliveryError] = useState<string | null>(null);
+
+  const handleUpdateDeliveryStatus = async (targetStatus: "SENT" | "PENDING") => {
+    if (!requestData) return;
+    setDeliveryError(null);
+    setUpdatingDelivery(true);
+    try {
+      const res = await fetch(`/api/v1/invoice-requests/${requestData.id}/delivery-status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: targetStatus }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success && data.data?.request) {
+        setRequestData((prev) => (prev ? { ...prev, ...data.data.request } : null));
+      } else {
+        setDeliveryError(data.error?.message || "No se pudo actualizar el estado de envío.");
+      }
+    } catch {
+      setDeliveryError("Error de conexión al actualizar estado de envío.");
+    } finally {
+      setUpdatingDelivery(false);
+    }
+  };
 
   const getOrFetchShareUrl = async (docId?: string): Promise<string | null> => {
     const targetDocId = docId || requestData?.document?.id;
@@ -438,6 +463,61 @@ export default function ViewInvoiceRequestPage() {
                 </button>
               </div>
             ) : null}
+
+            {/* Control de Entrega al Cliente */}
+            <div className="pt-3 border-t border-emerald-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs bg-white/70 p-3.5 rounded-xl border border-emerald-200">
+              <div>
+                <span className="font-bold text-slate-800 block">
+                  Control de entrega al cliente:
+                </span>
+                {requestData.customerDeliveryStatus === "SENT" ? (
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-emerald-100 text-emerald-900 border border-emerald-300">
+                      <span>✓</span>
+                      <span>Factura enviada al cliente</span>
+                    </span>
+                    {requestData.customerSentAt && (
+                      <span className="text-[11px] text-slate-500 font-mono">
+                        ({new Date(requestData.customerSentAt).toLocaleString("es-CL")})
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-amber-50 text-amber-900 border border-amber-300">
+                      <span>⏳</span>
+                      <span>Pendiente de envío al cliente</span>
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                {requestData.customerDeliveryStatus === "SENT" ? (
+                  <button
+                    type="button"
+                    onClick={() => handleUpdateDeliveryStatus("PENDING")}
+                    disabled={updatingDelivery}
+                    className="py-1.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg transition text-xs cursor-pointer"
+                  >
+                    {updatingDelivery ? "Actualizando..." : "Desmarcar envío"}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleUpdateDeliveryStatus("SENT")}
+                    disabled={updatingDelivery}
+                    className="py-1.5 px-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition text-xs shadow-xs flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>✓</span>
+                    <span>{updatingDelivery ? "Guardando..." : "Marcar como enviada"}</span>
+                  </button>
+                )}
+              </div>
+            </div>
+            {deliveryError && (
+              <p className="text-xs text-rose-600 font-semibold">{deliveryError}</p>
+            )}
           </div>
         )}
 

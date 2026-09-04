@@ -49,6 +49,14 @@ export const invoiceRequestSources = [
 
 export type InvoiceRequestSource = (typeof invoiceRequestSources)[number];
 
+export const customerDeliveryStatuses = [
+  "PENDING",
+  "SENT",
+  "LEGACY",
+] as const;
+
+export type CustomerDeliveryStatus = (typeof customerDeliveryStatuses)[number];
+
 export const requestCorrectionReasons = [
   "INVALID_RUT",
   "INVALID_LEGAL_NAME",
@@ -197,6 +205,11 @@ export const invoiceRequests = pgTable(
     source: varchar("source", { length: 50 }).notNull().default("NATIVE").$type<InvoiceRequestSource>(),
     legacySourceId: varchar("legacy_source_id", { length: 255 }),
     idempotencyKey: varchar("idempotency_key", { length: 255 }),
+    customerDeliveryStatus: varchar("customer_delivery_status", { length: 20 })
+      .default("PENDING")
+      .$type<CustomerDeliveryStatus>(),
+    customerSentAt: timestamp("customer_sent_at", { withTimezone: true }),
+    customerSentBy: uuid("customer_sent_by").references(() => users.id),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     assignedAt: timestamp("assigned_at", { withTimezone: true }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
@@ -207,6 +220,7 @@ export const invoiceRequests = pgTable(
     index("invoice_requests_status_created_at_idx").on(table.status, table.createdAt),
     index("invoice_requests_assigned_to_idx").on(table.assignedTo),
     index("invoice_requests_legacy_source_id_idx").on(table.legacySourceId),
+    index("invoice_requests_customer_delivery_status_idx").on(table.customerDeliveryStatus),
   ]
 );
 
