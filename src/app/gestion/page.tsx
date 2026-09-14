@@ -314,6 +314,18 @@ export default function GestionFacturacionPage() {
               </Link>
             )}
 
+            {(currentUser?.role === "INVOICE_EXECUTOR" ||
+              currentUser?.role === "MANAGEMENT" ||
+              currentUser?.role === "ADMIN") && (
+              <Link
+                href="/gestion/clientes"
+                className="py-2 px-3.5 bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 text-xs font-bold rounded-xl transition flex items-center gap-1.5 shadow-xs"
+              >
+                <span>🏢</span>
+                <span>Gestionar Clientes</span>
+              </Link>
+            )}
+
             {(currentUser?.role === "MANAGEMENT" || currentUser?.role === "ADMIN") && (
               <Link
                 href="/estadisticas"

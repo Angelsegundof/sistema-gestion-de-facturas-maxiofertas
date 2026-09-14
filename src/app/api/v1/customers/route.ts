@@ -56,17 +56,21 @@ export async function GET(request: NextRequest) {
       .where(
         or(
           eq(customers.rutCanonical, canonicalQuery),
-          ilike(customers.legalName, `%${query}%`)
+          ilike(customers.rutDisplay, `%${query}%`),
+          ilike(customers.legalName, `%${query}%`),
+          ilike(customers.businessActivity, `%${query}%`),
+          ilike(customers.email, `%${query}%`),
+          ilike(customers.phone, `%${query}%`)
         )
       )
-      .orderBy(desc(customers.createdAt))
-      .limit(50);
+      .orderBy(desc(customers.updatedAt))
+      .limit(100);
   } else {
     customerList = await db
       .select()
       .from(customers)
-      .orderBy(desc(customers.createdAt))
-      .limit(50);
+      .orderBy(desc(customers.updatedAt))
+      .limit(100);
   }
 
   const sanitized: SanitizedCustomer[] = customerList.map((c) => ({

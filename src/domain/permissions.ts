@@ -39,6 +39,7 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "WAREHOUSE_VIEW",
     "CUSTOMER_VIEW",
     "CUSTOMER_CREATE",
+    "CUSTOMER_MANAGE",
   ],
   MANAGEMENT: [
     "AUTH_LOGIN",
@@ -61,6 +62,7 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "WAREHOUSE_VIEW",
     "CUSTOMER_VIEW",
     "CUSTOMER_CREATE",
+    "CUSTOMER_MANAGE",
   ],
   ADMIN: [
     "AUTH_LOGIN",

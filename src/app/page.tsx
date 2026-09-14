@@ -98,12 +98,20 @@ export default async function HomePage() {
                 Consulta las facturas pendientes ordenadas por antigüedad (FIFO), toma solicitudes y gestiona rectificaciones.
               </p>
             </div>
-            <Link
-              href="/gestion"
-              className="inline-flex items-center justify-center py-3 px-6 bg-blue-500 hover:bg-blue-600 text-white font-bold text-sm rounded-xl shadow-md transition shrink-0"
-            >
-              Ir a Gestión de Facturas →
-            </Link>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
+              <Link
+                href="/gestion/clientes"
+                className="inline-flex items-center justify-center py-3 px-5 bg-white/10 hover:bg-white/20 text-white font-bold text-sm rounded-xl border border-white/20 transition"
+              >
+                🏢 Gestionar Clientes
+              </Link>
+              <Link
+                href="/gestion"
+                className="inline-flex items-center justify-center py-3 px-6 bg-blue-500 hover:bg-blue-600 text-white font-bold text-sm rounded-xl shadow-md transition"
+              >
+                Ir a Gestión de Facturas →
+              </Link>
+            </div>
           </section>
         )}
 
