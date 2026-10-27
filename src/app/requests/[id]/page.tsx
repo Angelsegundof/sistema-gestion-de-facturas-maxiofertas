@@ -259,6 +259,8 @@ export default function ViewInvoiceRequestPage() {
         return <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-100 text-rose-800">Necesita corrección</span>;
       case "COMPLETED":
         return <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">Lista</span>;
+      case "CANCELLED":
+        return <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-200 text-slate-700">Cancelada</span>;
       default:
         return <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-800">{requestData.status}</span>;
     }

@@ -242,6 +242,12 @@ export default function RequesterInvoiceList() {
           actionType: "COMPLETED",
         };
       }
+      case "CANCELLED":
+        return {
+          label: "Cancelada",
+          bg: "bg-slate-100 text-slate-600 border-slate-300",
+          actionType: "CANCELLED",
+        };
       default:
         return {
           label: req.status,
